@@ -11,8 +11,8 @@ import {
 import type { ChannelPlugin } from "../../../src/channels/plugins/types.plugin.js";
 import type { ResolvedFeishuAccount } from "../../../src/feishu/accounts.js";
 import type { ClawdbotConfig } from "../../../src/config/config.js";
-import { createFeishuBot, startFeishuBot } from "../../../src/feishu/bot.js";
 import { probeFeishu } from "../../../src/feishu/probe.js";
+import { monitorFeishuProvider } from "../../../src/feishu/monitor.js";
 import { feishuOnboardingAdapter } from "./onboarding.js";
 import { FeishuAccountSchema } from "./config-schema.js";
 import { getFeishuRuntime } from "./runtime.js";
@@ -90,7 +90,7 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
   },
   gateway: {
     startAccount: async (ctx) => {
-      const { account, log, setStatus } = ctx;
+      const { account, log, setStatus, abortSignal, cfg, runtime } = ctx;
       const config = account.config;
 
       // Probe first to verify credentials
@@ -106,11 +106,6 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
 
       log?.info(`[${account.accountId}] starting Feishu provider${feishuBotLabel}`);
 
-      const bot = createFeishuBot({
-        appId: config.appId,
-        appSecret: config.appSecret,
-      });
-
       setStatus({
         accountId: account.accountId,
         running: true,
@@ -118,7 +113,14 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
       });
 
       try {
-        await startFeishuBot(bot);
+        await monitorFeishuProvider({
+          appId: config.appId,
+          appSecret: config.appSecret,
+          accountId: account.accountId,
+          config: cfg,
+          runtime,
+          abortSignal,
+        });
       } catch (err) {
         setStatus({
           accountId: account.accountId,
