@@ -2,11 +2,20 @@ import type { Client } from "@larksuiteoapi/node-sdk";
 import { dispatchReplyWithBufferedBlockDispatcher } from "../auto-reply/reply/provider-dispatcher.js";
 import { loadConfig } from "../config/config.js";
 import { getChildLogger } from "../logging.js";
+import { resolveFeishuMedia, type FeishuMediaRef } from "./download.js";
 import { sendMessageFeishu } from "./send.js";
 
 const logger = getChildLogger({ module: "feishu-message" });
 
-export async function processFeishuMessage(client: Client, data: any, appId: string) {
+// Supported message types for processing
+const SUPPORTED_MSG_TYPES = ["text", "image", "file", "audio", "media", "sticker"];
+
+export async function processFeishuMessage(
+  client: Client,
+  data: any,
+  appId: string,
+  maxMediaBytes: number = 30 * 1024 * 1024,
+) {
   // SDK 2.0 schema: data directly contains message, sender, etc.
   const message = data.message ?? data.event?.message;
   const sender = data.sender ?? data.event?.sender;
@@ -18,23 +27,15 @@ export async function processFeishuMessage(client: Client, data: any, appId: str
 
   const chatId = message.chat_id;
   const isGroup = message.chat_type === "group";
+  const msgType = message.message_type;
 
-  // Only handle text messages for now
-  if (message.message_type !== "text") {
-    logger.debug(`Skipping non-text message type: ${message.message_type}`);
+  // Check if this is a supported message type
+  if (!SUPPORTED_MSG_TYPES.includes(msgType)) {
+    logger.debug(`Skipping unsupported message type: ${msgType}`);
     return;
   }
 
-  let text = "";
-  try {
-    const content = JSON.parse(message.content);
-    text = content.text || "";
-  } catch (e) {
-    logger.error(`Failed to parse message content: ${e}`);
-    return;
-  }
-
-  // Handle @mentions
+  // Handle @mentions for group chats
   const mentions = message.mentions ?? data.mentions ?? [];
   const wasMentioned = mentions.length > 0;
 
@@ -44,6 +45,17 @@ export async function processFeishuMessage(client: Client, data: any, appId: str
     return;
   }
 
+  // Extract text content (for text messages or captions)
+  let text = "";
+  if (msgType === "text") {
+    try {
+      const content = JSON.parse(message.content);
+      text = content.text || "";
+    } catch (e) {
+      logger.error(`Failed to parse text message content: ${e}`);
+    }
+  }
+
   // Remove @mention placeholders from text
   for (const mention of mentions) {
     if (mention.key) {
@@ -51,8 +63,25 @@ export async function processFeishuMessage(client: Client, data: any, appId: str
     }
   }
 
-  if (!text) {
-    logger.debug(`Empty text after processing, skipping`);
+  // Resolve media if present
+  let media: FeishuMediaRef | null = null;
+  if (msgType !== "text") {
+    try {
+      media = await resolveFeishuMedia(client, message, maxMediaBytes);
+    } catch (err) {
+      logger.error(`Failed to download media: ${err}`);
+    }
+  }
+
+  // Build body text
+  let bodyText = text;
+  if (!bodyText && media) {
+    bodyText = media.placeholder;
+  }
+
+  // Skip if no content
+  if (!bodyText && !media) {
+    logger.debug(`Empty message after processing, skipping`);
     return;
   }
 
@@ -62,10 +91,10 @@ export async function processFeishuMessage(client: Client, data: any, appId: str
 
   // Context construction
   const ctx = {
-    Body: text,
-    RawBody: text,
+    Body: bodyText,
+    RawBody: text || media?.placeholder || "",
     From: senderId,
-    To: chatId, // This is where we send reply back
+    To: chatId,
     SenderId: senderId,
     SenderName: senderName,
     ChatType: isGroup ? "group" : "dm",
@@ -76,6 +105,11 @@ export async function processFeishuMessage(client: Client, data: any, appId: str
     AccountId: appId,
     OriginatingChannel: "feishu",
     OriginatingTo: chatId,
+    // Media fields (similar to Telegram)
+    MediaPath: media?.path,
+    MediaType: media?.contentType,
+    MediaUrl: media?.path,
+    WasMentioned: isGroup ? wasMentioned : undefined,
   };
 
   await dispatchReplyWithBufferedBlockDispatcher({
