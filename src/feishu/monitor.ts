@@ -4,6 +4,7 @@ import { loadConfig } from "../config/config.js";
 import { getChildLogger } from "../logging.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { resolveFeishuAccount } from "./accounts.js";
+import { resolveFeishuConfig } from "./config.js";
 import { processFeishuMessage } from "./message.js";
 
 const logger = getChildLogger({ module: "feishu-monitor" });
@@ -26,11 +27,21 @@ export async function monitorFeishuProvider(opts: MonitorFeishuOpts = {}): Promi
 
   const appId = opts.appId?.trim() || account.config.appId;
   const appSecret = opts.appSecret?.trim() || account.config.appSecret;
+  const accountId = account.accountId;
 
   if (!appId || !appSecret) {
     throw new Error(
-      `Feishu App ID and Secret missing for account "${account.accountId}" (set channels.feishu.accounts.${account.accountId}.appId/appSecret or FEISHU_APP_ID/SECRET env vars).`,
+      `Feishu App ID and Secret missing for account "${accountId}" (set channels.feishu.accounts.${accountId}.appId/appSecret or FEISHU_APP_ID/SECRET env vars).`,
     );
+  }
+
+  // Resolve effective config for this account
+  const feishuCfg = resolveFeishuConfig({ cfg, accountId });
+
+  // Check if account is enabled
+  if (!feishuCfg.enabled) {
+    logger.info(`Feishu account "${accountId}" is disabled, skipping monitor`);
+    return;
   }
 
   const log = opts.runtime?.log ?? console.log;
@@ -62,7 +73,11 @@ export async function monitorFeishuProvider(opts: MonitorFeishuOpts = {}): Promi
   const eventDispatcher = new Lark.EventDispatcher({}).register({
     "im.message.receive_v1": async (data) => {
       try {
-        await processFeishuMessage(client, data, appId);
+        await processFeishuMessage(client, data, appId, {
+          cfg,
+          accountId,
+          resolvedConfig: feishuCfg,
+        });
       } catch (err) {
         logger.error(`Error processing Feishu message: ${err}`);
       }

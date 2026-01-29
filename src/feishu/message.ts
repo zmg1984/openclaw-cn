@@ -1,8 +1,18 @@
 import type { Client } from "@larksuiteoapi/node-sdk";
 import { dispatchReplyWithBufferedBlockDispatcher } from "../auto-reply/reply/provider-dispatcher.js";
+import type { ClawdbotConfig } from "../config/config.js";
 import { loadConfig } from "../config/config.js";
+import { logVerbose } from "../globals.js";
 import { getChildLogger } from "../logging.js";
+import { isSenderAllowed, normalizeAllowFromWithStore, resolveSenderAllowMatch } from "./access.js";
+import {
+  resolveFeishuConfig,
+  resolveFeishuGroupConfig,
+  resolveFeishuGroupEnabled,
+  type ResolvedFeishuConfig,
+} from "./config.js";
 import { resolveFeishuMedia, type FeishuMediaRef } from "./download.js";
+import { readFeishuAllowFromStore, upsertFeishuPairingRequest } from "./pairing-store.js";
 import { sendMessageFeishu } from "./send.js";
 
 const logger = getChildLogger({ module: "feishu-message" });
@@ -10,12 +20,22 @@ const logger = getChildLogger({ module: "feishu-message" });
 // Supported message types for processing
 const SUPPORTED_MSG_TYPES = ["text", "image", "file", "audio", "media", "sticker"];
 
+export type ProcessFeishuMessageOptions = {
+  cfg?: ClawdbotConfig;
+  accountId?: string;
+  resolvedConfig?: ResolvedFeishuConfig;
+};
+
 export async function processFeishuMessage(
   client: Client,
   data: any,
   appId: string,
-  maxMediaBytes: number = 30 * 1024 * 1024,
+  options: ProcessFeishuMessageOptions = {},
 ) {
+  const cfg = options.cfg ?? loadConfig();
+  const accountId = options.accountId ?? appId;
+  const feishuCfg = options.resolvedConfig ?? resolveFeishuConfig({ cfg, accountId });
+
   // SDK 2.0 schema: data directly contains message, sender, etc.
   const message = data.message ?? data.event?.message;
   const sender = data.sender ?? data.event?.sender;
@@ -28,6 +48,9 @@ export async function processFeishuMessage(
   const chatId = message.chat_id;
   const isGroup = message.chat_type === "group";
   const msgType = message.message_type;
+  const senderId = sender?.sender_id?.open_id || sender?.sender_id?.user_id || "unknown";
+  const senderUnionId = sender?.sender_id?.union_id;
+  const maxMediaBytes = feishuCfg.mediaMaxMb * 1024 * 1024;
 
   // Check if this is a supported message type
   if (!SUPPORTED_MSG_TYPES.includes(msgType)) {
@@ -35,14 +58,128 @@ export async function processFeishuMessage(
     return;
   }
 
+  // Load allowlist from store
+  const storeAllowFrom = await readFeishuAllowFromStore().catch(() => []);
+
+  // ===== Access Control =====
+
+  // Group access control
+  if (isGroup) {
+    // Check if group is enabled
+    if (!resolveFeishuGroupEnabled({ cfg, accountId, chatId })) {
+      logVerbose(`Blocked feishu group ${chatId} (group disabled)`);
+      return;
+    }
+
+    const { groupConfig } = resolveFeishuGroupConfig({ cfg, accountId, chatId });
+
+    // Check group-level allowFrom override
+    if (groupConfig?.allowFrom) {
+      const groupAllow = normalizeAllowFromWithStore({
+        allowFrom: groupConfig.allowFrom,
+        storeAllowFrom,
+      });
+      if (!isSenderAllowed({ allow: groupAllow, senderId })) {
+        logVerbose(`Blocked feishu group sender ${senderId} (group allowFrom override)`);
+        return;
+      }
+    }
+
+    // Apply groupPolicy
+    const groupPolicy = feishuCfg.groupPolicy;
+    if (groupPolicy === "disabled") {
+      logVerbose(`Blocked feishu group message (groupPolicy: disabled)`);
+      return;
+    }
+
+    if (groupPolicy === "allowlist") {
+      const groupAllow = normalizeAllowFromWithStore({
+        allowFrom:
+          feishuCfg.groupAllowFrom.length > 0 ? feishuCfg.groupAllowFrom : feishuCfg.allowFrom,
+        storeAllowFrom,
+      });
+      if (!groupAllow.hasEntries) {
+        logVerbose(`Blocked feishu group message (groupPolicy: allowlist, no entries)`);
+        return;
+      }
+      if (!isSenderAllowed({ allow: groupAllow, senderId })) {
+        logVerbose(`Blocked feishu group sender ${senderId} (groupPolicy: allowlist)`);
+        return;
+      }
+    }
+  }
+
+  // DM access control
+  if (!isGroup) {
+    const dmPolicy = feishuCfg.dmPolicy;
+
+    if (dmPolicy === "disabled") {
+      logVerbose(`Blocked feishu DM (dmPolicy: disabled)`);
+      return;
+    }
+
+    if (dmPolicy !== "open") {
+      const dmAllow = normalizeAllowFromWithStore({
+        allowFrom: feishuCfg.allowFrom,
+        storeAllowFrom,
+      });
+      const allowMatch = resolveSenderAllowMatch({ allow: dmAllow, senderId });
+      const allowed = dmAllow.hasWildcard || (dmAllow.hasEntries && allowMatch.allowed);
+
+      if (!allowed) {
+        if (dmPolicy === "pairing") {
+          // Generate pairing code for unknown sender
+          try {
+            const { code, created } = await upsertFeishuPairingRequest({
+              openId: senderId,
+              unionId: senderUnionId,
+              name: sender?.sender_id?.user_id,
+            });
+            if (created) {
+              logger.info({ openId: senderId, unionId: senderUnionId }, "feishu pairing request");
+              await sendMessageFeishu(
+                client,
+                senderId,
+                {
+                  text: [
+                    "Clawdbot: 访问未配置。",
+                    "",
+                    `您的飞书 Open ID: ${senderId}`,
+                    "",
+                    `配对码: ${code}`,
+                    "",
+                    "请让机器人管理员执行以下命令批准:",
+                    `clawdbot pairing approve feishu ${code}`,
+                  ].join("\n"),
+                },
+                { receiveIdType: "open_id" },
+              );
+            }
+          } catch (err) {
+            logger.error(`Failed to create pairing request: ${err}`);
+          }
+          return;
+        }
+
+        // allowlist policy: silently block
+        logVerbose(`Blocked feishu DM from ${senderId} (dmPolicy: allowlist)`);
+        return;
+      }
+    }
+  }
+
   // Handle @mentions for group chats
   const mentions = message.mentions ?? data.mentions ?? [];
   const wasMentioned = mentions.length > 0;
 
-  // In group chat, only respond when bot is mentioned
-  if (isGroup && !wasMentioned) {
-    logger.debug(`Ignoring group message without @mention`);
-    return;
+  // In group chat, check requireMention setting
+  if (isGroup) {
+    const { groupConfig } = resolveFeishuGroupConfig({ cfg, accountId, chatId });
+    const requireMention = groupConfig?.requireMention ?? true;
+    if (requireMention && !wasMentioned) {
+      logger.debug(`Ignoring group message without @mention (requireMention: true)`);
+      return;
+    }
   }
 
   // Extract text content (for text messages or captions)
@@ -85,9 +222,7 @@ export async function processFeishuMessage(
     return;
   }
 
-  const senderId = sender?.sender_id?.open_id || sender?.sender_id?.user_id || "unknown";
   const senderName = sender?.sender_id?.user_id || "unknown";
-  const cfg = loadConfig();
 
   // Context construction
   const ctx = {
@@ -161,7 +296,7 @@ export async function processFeishuMessage(
       onReplyStart: () => {},
     },
     replyOptions: {
-      disableBlockStreaming: true,
+      disableBlockStreaming: feishuCfg.blockStreaming,
     },
   });
 }
