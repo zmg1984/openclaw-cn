@@ -1,5 +1,8 @@
 # Openclaw 中文版 Docker Compose 配置
 # 使用方法: docker compose up -d openclaw-cn-gateway
+# 
+# 注意: 所有内置插件（extensions/）都已包含在 Docker 镜像中
+# 包括: Feishu、Telegram、Discord、Slack、Signal、WhatsApp 等
 
 services:
   # 网关服务 - 主要的后台服务

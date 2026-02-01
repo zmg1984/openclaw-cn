@@ -308,13 +308,10 @@ importers:
   extensions/discord: {}
 
   extensions/feishu:
-    devDependencies:
-      clawdbot:
-        specifier: workspace:moltbot-cn@*
-        version: link:../..
-      moltbot-cn:
-        specifier: workspace:*
-        version: link:../..
+    dependencies:
+      openclaw-cn:
+        specifier: '*'
+        version: 2026.1.31(@types/express@5.0.6)(audio-decode@2.2.3)(devtools-protocol@0.0.1561482)(typescript@5.9.3)
 
   extensions/google-antigravity-auth: {}
 
@@ -327,7 +324,7 @@ importers:
         version: 10.5.0
     devDependencies:
       clawdbot:
-        specifier: workspace:moltbot-cn@*
+        specifier: workspace:openclaw-cn@*
         version: link:../..
 
   extensions/imessage: {}
@@ -335,7 +332,7 @@ importers:
   extensions/line:
     devDependencies:
       clawdbot:
-        specifier: workspace:moltbot-cn@*
+        specifier: workspace:openclaw-cn@*
         version: link:../..
 
   extensions/llm-task: {}
@@ -361,16 +358,16 @@ importers:
         version: 4.3.6
     devDependencies:
       clawdbot:
-        specifier: workspace:moltbot-cn@*
+        specifier: workspace:openclaw-cn@*
         version: link:../..
 
   extensions/mattermost: {}
 
   extensions/memory-core:
     dependencies:
-      moltbot-cn:
+      openclaw-cn:
         specifier: '*'
-        version: 2026.1.24-cn.3(@types/express@5.0.6)(audio-decode@2.2.3)(devtools-protocol@0.0.1561482)(typescript@5.9.3)
+        version: 2026.1.31(@types/express@5.0.6)(audio-decode@2.2.3)(devtools-protocol@0.0.1561482)(typescript@5.9.3)
 
   extensions/memory-lancedb:
     dependencies:
@@ -396,7 +393,7 @@ importers:
         specifier: ^1.2.2
         version: 1.2.2
       clawdbot:
-        specifier: workspace:moltbot-cn@*
+        specifier: workspace:openclaw-cn@*
         version: link:../..
       express:
         specifier: ^5.2.1
@@ -410,7 +407,7 @@ importers:
   extensions/nostr:
     dependencies:
       clawdbot:
-        specifier: workspace:moltbot-cn@*
+        specifier: workspace:openclaw-cn@*
         version: link:../..
       nostr-tools:
         specifier: ^2.20.0
@@ -453,7 +450,7 @@ importers:
   extensions/zalo:
     dependencies:
       clawdbot:
-        specifier: workspace:moltbot-cn@*
+        specifier: workspace:openclaw-cn@*
         version: link:../..
       undici:
         specifier: 7.19.0
@@ -465,7 +462,7 @@ importers:
         specifier: 0.34.47
         version: 0.34.47
       clawdbot:
-        specifier: workspace:moltbot-cn@*
+        specifier: workspace:openclaw-cn@*
         version: link:../..
 
   ui:
@@ -4280,11 +4277,6 @@ packages:
   module-details-from-path@1.0.4:
     resolution: {integrity: sha512-EGWKgxALGMgzvxYF1UyGTy0HXX/2vHLkw6+NvDKW2jypWbHpjQuj4UMcqQWXHERJhVGKikolT06G3bcKe4fi7w==}
 
-  moltbot-cn@2026.1.24-cn.3:
-    resolution: {integrity: sha512-aMWFWYNTSuzxc5201Po8ZRDxwZ9DSz99sn9SXsWXbXkhSQzLTA3g2vrczXD3iwfujzHqtyxCmnb1HA1UbNQzLA==}
-    engines: {node: '>=22.12.0'}
-    hasBin: true
-
   morgan@1.10.1:
     resolution: {integrity: sha512-223dMRJtI/l25dJKWpgij2cMtywuG/WiUKXdvwfbhGKBhy1puASqXwFzmWZ7+K73vUPoR7SS2Qz2cI/g9MKw0A==}
     engines: {node: '>= 0.8.0'}
@@ -4472,6 +4464,11 @@ packages:
         optional: true
       zod:
         optional: true
+
+  openclaw-cn@2026.1.31:
+    resolution: {integrity: sha512-n4/QT9wUs4cUr6TxaGqH+Ef4nARi9qO+ia+tPYWjp2a9kt7kj+YW7+nWR1wymRpBLUVJzh20u+4kfZnVj4lBeg==}
+    engines: {node: '>=22.12.0'}
+    hasBin: true
 
   opus-decoder@0.7.11:
     resolution: {integrity: sha512-+e+Jz3vGQLxRTBHs8YJQPRPc1Tr+/aC6coV/DlZylriA29BdHQAYXhvNRKtjftof17OFng0+P4wsFIqQu3a48A==}
@@ -10154,84 +10151,6 @@ snapshots:
 
   module-details-from-path@1.0.4: {}
 
-  moltbot-cn@2026.1.24-cn.3(@types/express@5.0.6)(audio-decode@2.2.3)(devtools-protocol@0.0.1561482)(typescript@5.9.3):
-    dependencies:
-      '@agentclientprotocol/sdk': 0.13.1(zod@4.3.6)
-      '@aws-sdk/client-bedrock': 3.975.0
-      '@buape/carbon': 0.14.0(hono@4.11.4)
-      '@clack/prompts': 0.11.0
-      '@grammyjs/runner': 2.0.3(grammy@1.39.3)
-      '@grammyjs/transformer-throttler': 1.2.1(grammy@1.39.3)
-      '@homebridge/ciao': 1.3.4
-      '@line/bot-sdk': 10.6.0
-      '@lydell/node-pty': 1.2.0-beta.3
-      '@mariozechner/pi-agent-core': 0.49.3(ws@8.19.0)(zod@4.3.6)
-      '@mariozechner/pi-ai': 0.49.3(ws@8.19.0)(zod@4.3.6)
-      '@mariozechner/pi-coding-agent': 0.49.3(ws@8.19.0)(zod@4.3.6)
-      '@mariozechner/pi-tui': 0.49.3
-      '@mozilla/readability': 0.6.0
-      '@sinclair/typebox': 0.34.47
-      '@slack/bolt': 4.6.0(@types/express@5.0.6)
-      '@slack/web-api': 7.13.0
-      '@whiskeysockets/baileys': 7.0.0-rc.9(audio-decode@2.2.3)(sharp@0.34.5)
-      ajv: 8.17.1
-      body-parser: 2.2.2
-      chalk: 5.6.2
-      chokidar: 5.0.0
-      chromium-bidi: 13.0.1(devtools-protocol@0.0.1561482)
-      cli-highlight: 2.1.11
-      commander: 14.0.2
-      croner: 9.1.0
-      detect-libc: 2.1.2
-      discord-api-types: 0.38.37
-      dotenv: 17.2.3
-      express: 5.2.1
-      file-type: 21.3.0
-      grammy: 1.39.3
-      hono: 4.11.4
-      jiti: 2.6.1
-      json5: 2.2.3
-      jszip: 3.10.1
-      linkedom: 0.18.12
-      long: 5.3.2
-      markdown-it: 14.1.0
-      node-edge-tts: 1.2.9
-      osc-progress: 0.3.0
-      pdfjs-dist: 5.4.530
-      playwright-core: 1.58.0
-      proper-lockfile: 4.1.2
-      qrcode-terminal: 0.12.0
-      sharp: 0.34.5
-      sqlite-vec: 0.1.7-alpha.2
-      tar: 7.5.4
-      tslog: 4.10.2
-      undici: 7.19.0
-      ws: 8.19.0
-      yaml: 2.8.2
-      zod: 4.3.6
-    optionalDependencies:
-      '@napi-rs/canvas': 0.1.88
-      node-llama-cpp: 3.15.0(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@discordjs/opus'
-      - '@modelcontextprotocol/sdk'
-      - '@types/express'
-      - audio-decode
-      - aws-crt
-      - bufferutil
-      - canvas
-      - debug
-      - devtools-protocol
-      - encoding
-      - ffmpeg-static
-      - jimp
-      - link-preview-js
-      - node-opus
-      - opusscript
-      - supports-color
-      - typescript
-      - utf-8-validate
-
   morgan@1.10.1:
     dependencies:
       basic-auth: 2.0.1
@@ -10461,6 +10380,85 @@ snapshots:
     optionalDependencies:
       ws: 8.19.0
       zod: 4.3.6
+
+  openclaw-cn@2026.1.31(@types/express@5.0.6)(audio-decode@2.2.3)(devtools-protocol@0.0.1561482)(typescript@5.9.3):
+    dependencies:
+      '@agentclientprotocol/sdk': 0.13.1(zod@4.3.6)
+      '@aws-sdk/client-bedrock': 3.975.0
+      '@buape/carbon': 0.14.0(hono@4.11.4)
+      '@clack/prompts': 0.11.0
+      '@grammyjs/runner': 2.0.3(grammy@1.39.3)
+      '@grammyjs/transformer-throttler': 1.2.1(grammy@1.39.3)
+      '@homebridge/ciao': 1.3.4
+      '@larksuiteoapi/node-sdk': 1.56.1
+      '@line/bot-sdk': 10.6.0
+      '@lydell/node-pty': 1.2.0-beta.3
+      '@mariozechner/pi-agent-core': 0.49.3(ws@8.19.0)(zod@4.3.6)
+      '@mariozechner/pi-ai': 0.49.3(ws@8.19.0)(zod@4.3.6)
+      '@mariozechner/pi-coding-agent': 0.49.3(ws@8.19.0)(zod@4.3.6)
+      '@mariozechner/pi-tui': 0.49.3
+      '@mozilla/readability': 0.6.0
+      '@sinclair/typebox': 0.34.47
+      '@slack/bolt': 4.6.0(@types/express@5.0.6)
+      '@slack/web-api': 7.13.0
+      '@whiskeysockets/baileys': 7.0.0-rc.9(audio-decode@2.2.3)(sharp@0.34.5)
+      ajv: 8.17.1
+      body-parser: 2.2.2
+      chalk: 5.6.2
+      chokidar: 5.0.0
+      chromium-bidi: 13.0.1(devtools-protocol@0.0.1561482)
+      cli-highlight: 2.1.11
+      commander: 14.0.2
+      croner: 9.1.0
+      detect-libc: 2.1.2
+      discord-api-types: 0.38.37
+      dotenv: 17.2.3
+      express: 5.2.1
+      file-type: 21.3.0
+      grammy: 1.39.3
+      hono: 4.11.4
+      jiti: 2.6.1
+      json5: 2.2.3
+      jszip: 3.10.1
+      linkedom: 0.18.12
+      long: 5.3.2
+      markdown-it: 14.1.0
+      node-edge-tts: 1.2.9
+      osc-progress: 0.3.0
+      pdfjs-dist: 5.4.530
+      playwright-core: 1.58.0
+      proper-lockfile: 4.1.2
+      qrcode-terminal: 0.12.0
+      sharp: 0.34.5
+      sqlite-vec: 0.1.7-alpha.2
+      tar: 7.5.4
+      tslog: 4.10.2
+      undici: 7.19.0
+      ws: 8.19.0
+      yaml: 2.8.2
+      zod: 4.3.6
+    optionalDependencies:
+      '@napi-rs/canvas': 0.1.88
+      node-llama-cpp: 3.15.0(typescript@5.9.3)
+    transitivePeerDependencies:
+      - '@discordjs/opus'
+      - '@modelcontextprotocol/sdk'
+      - '@types/express'
+      - audio-decode
+      - aws-crt
+      - bufferutil
+      - canvas
+      - debug
+      - devtools-protocol
+      - encoding
+      - ffmpeg-static
+      - jimp
+      - link-preview-js
+      - node-opus
+      - opusscript
+      - supports-color
+      - typescript
+      - utf-8-validate
 
   opus-decoder@0.7.11:
     dependencies:

@@ -1,18 +1,51 @@
 {
-  "name": "@clawdbot/feishu",
+  "name": "@openclaw-cn/feishu",
   "version": "2026.1.31",
   "type": "module",
-  "description": "Clawdbot Feishu channel plugin",
-  "clawdbot": {
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist/",
+    "package.json",
+    "README.md"
+  ],
+  "openclaw": {
     "extensions": [
       "./index.ts"
     ]
   },
-  "devDependencies": {
-    "clawdbot": "workspace:openclaw-cn@*",
-    "openclaw-cn": "workspace:*"
+  "description": "Feishu (Larksuite) channel plugin for OpenClaw Chinese",
+  "keywords": ["openclaw", "plugin", "feishu", "larksuite"],
+  "license": "MIT",
+  "homepage": "https://github.com/openclaw/openclaw-cn/tree/main/extensions/feishu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openclaw/openclaw-cn.git",
+    "directory": "extensions/feishu"
+  },
+  "bugs": {
+    "url": "https://github.com/openclaw/openclaw-cn/issues"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
   },
   "peerDependencies": {
     "openclaw-cn": "*"
+  },
+  "peerDependenciesMeta": {
+    "openclaw-cn": {
+      "optional": false
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

@@ -55,9 +55,11 @@ RUN corepack enable && \
 
 WORKDIR /app
 
-# 复制构建产物
+# 复制构建产物和扩展
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+# 复制扩展（插件）目录，包括所有已编译的依赖
+COPY --from=builder /app/extensions ./extensions
 
 # 仅安装生产依赖
 RUN pnpm install --frozen-lockfile --production --ignore-scripts

@@ -85,8 +85,13 @@ vendor/
 Jenkinsfile
 .env
 .env.example
-scripts/
+# scripts/ 需要保留给 Dockerfile 使用
 docs/
+
+# 但保留 extensions/ 目录中的源代码和编译结果（plugins 必需）
+# 只排除 extensions 中的开发文件
+# extensions/*/node_modules 会在构建时自动安装
+# extensions/*/.turbo 和其他缓存已通过上面的规则排除
 
 # Package manager lock files (will be regenerated)
 yarn.lock

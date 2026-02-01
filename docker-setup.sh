@@ -1,18 +1,21 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Openclaw 中文版 Docker 一键设置脚本
 # 用法: ./docker-setup.sh
+# 支持平台: macOS (bash 3.2+), Linux (bash 4+)
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
-EXTRA_COMPOSE_FILE="$ROOT_DIR/docker-compose.extra.yml"
-IMAGE_NAME="${OPENCLAW_IMAGE:-openclaw-cn:local}"
-EXTRA_MOUNTS="${OPENCLAW_EXTRA_MOUNTS:-}"
-HOME_VOLUME_NAME="${OPENCLAW_HOME_VOLUME:-}"
+# 检测操作系统
+OS_TYPE="unknown"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  OS_TYPE="macOS"
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+  OS_TYPE="Linux"
+fi
 
+# 检查依赖
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    echo "缺少依赖: $1" >&2
+    echo "❌ 缺少依赖: $1" >&2
     exit 1
   fi
 }
@@ -22,6 +25,22 @@ if ! docker compose version >/dev/null 2>&1; then
   echo "Docker Compose 不可用（请尝试: docker compose version）" >&2
   exit 1
 fi
+
+# 初始化基本变量
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
+EXTRA_COMPOSE_FILE="$ROOT_DIR/docker-compose.extra.yml"
+IMAGE_NAME="${OPENCLAW_IMAGE:-openclaw-cn:local}"
+EXTRA_MOUNTS="${OPENCLAW_EXTRA_MOUNTS:-}"
+HOME_VOLUME_NAME="${OPENCLAW_HOME_VOLUME:-}"
+
+# 打印启动信息
+echo "╔════════════════════════════════════════════╗"
+echo "║  Openclaw 中文版 Docker 一键设置脚本      ║"
+echo "║  平台: $OS_TYPE                            "
+echo "║  Bash 版本: $BASH_VERSION                  "
+echo "╚════════════════════════════════════════════╝"
+echo ""
 
 # 创建配置和工作区目录
 mkdir -p "${OPENCLAW_CONFIG_DIR:-$HOME/.openclaw}"
@@ -123,15 +142,15 @@ for compose_file in "${COMPOSE_FILES[@]}"; do
   COMPOSE_HINT+=" -f ${compose_file}"
 done
 
-# 更新 .env 文件
+# 更新 .env 文件（兼容 bash 和 zsh，不使用关联数组）
 ENV_FILE="$ROOT_DIR/.env"
 upsert_env() {
   local file="$1"
   shift
-  local -a keys=("$@")
+  local keys=("$@")
   local tmp
   tmp="$(mktemp)"
-  declare -A seen=()
+  local seen_keys=""
 
   if [[ -f "$file" ]]; then
     while IFS= read -r line || [[ -n "$line" ]]; do
@@ -140,7 +159,7 @@ upsert_env() {
       for k in "${keys[@]}"; do
         if [[ "$key" == "$k" ]]; then
           printf '%s=%s\n' "$k" "${!k-}" >>"$tmp"
-          seen["$k"]=1
+          seen_keys="$seen_keys|$k"
           replaced=true
           break
         fi
@@ -152,7 +171,7 @@ upsert_env() {
   fi
 
   for k in "${keys[@]}"; do
-    if [[ -z "${seen[$k]:-}" ]]; then
+    if [[ "$seen_keys" != *"|$k"* ]]; then
       printf '%s=%s\n' "$k" "${!k-}" >>"$tmp"
     fi
   done
@@ -205,12 +224,34 @@ echo "==> 启动网关"
 docker compose "${COMPOSE_ARGS[@]}" up -d openclaw-cn-gateway
 
 echo ""
-echo "网关已启动，使用主机端口映射。"
-echo "通过主机的 Tailnet IP 从其他设备访问。"
-echo "配置目录: $OPENCLAW_CONFIG_DIR"
-echo "工作区目录: $OPENCLAW_WORKSPACE_DIR"
-echo "令牌: $OPENCLAW_GATEWAY_TOKEN"
+echo "╔════════════════════════════════════════════╗"
+echo "║  ✅ 网关启动成功！                         ║"
+echo "╚════════════════════════════════════════════╝"
 echo ""
-echo "常用命令:"
-echo "  ${COMPOSE_HINT} logs -f openclaw-cn-gateway"
-echo "  ${COMPOSE_HINT} exec openclaw-cn-gateway node dist/index.js health --token \"$OPENCLAW_GATEWAY_TOKEN\""
+echo "📋 系统信息:"
+echo "   操作系统: $OS_TYPE"
+echo "   Bash 版本: $BASH_VERSION"
+echo ""
+echo "🔑 网关信息:"
+echo "   配置目录: $OPENCLAW_CONFIG_DIR"
+echo "   工作区目录: $OPENCLAW_WORKSPACE_DIR"
+echo "   令牌: $OPENCLAW_GATEWAY_TOKEN"
+echo ""
+echo "📱 访问网关:"
+if [[ "$OS_TYPE" == "macOS" ]]; then
+  echo "   在浏览器中打开: http://127.0.0.1:18789"
+elif [[ "$OS_TYPE" == "Linux" ]]; then
+  echo "   在浏览器中打开: http://127.0.0.1:18789"
+  echo "   或者从其他设备访问: http://\$(hostname -I):18789"
+else
+  echo "   在浏览器中打开: http://127.0.0.1:18789"
+fi
+echo ""
+echo "💡 常用命令:"
+echo "   查看日志: ${COMPOSE_HINT} logs -f openclaw-cn-gateway"
+echo "   检查健康: ${COMPOSE_HINT} exec openclaw-cn-gateway node dist/index.js health --token \"$OPENCLAW_GATEWAY_TOKEN\""
+echo "   停止网关: ${COMPOSE_HINT} down"
+echo "   重启网关: ${COMPOSE_HINT} restart openclaw-cn-gateway"
+echo ""
+echo "📚 文档: https://clawd.org.cn/docs"
+echo ""

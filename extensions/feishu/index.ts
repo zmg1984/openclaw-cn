@@ -6,7 +6,7 @@ import { setFeishuRuntime } from "./src/runtime.js";
 const plugin = {
   id: "feishu",
   name: "Feishu",
-  description: "Feishu channel plugin",
+  description: "Feishu (Larksuite) channel plugin",
   configSchema: emptyPluginConfigSchema(),
   register(api: ClawdbotPluginApi) {
     setFeishuRuntime(api.runtime);
