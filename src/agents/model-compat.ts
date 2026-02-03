@@ -4,8 +4,19 @@ function isOpenAiCompletionsModel(model: Model<Api>): model is Model<"openai-com
   return model.api === "openai-completions";
 }
 
+/**
+ * Ensures the model has an `input` field to prevent crashes in upstream SDK.
+ * The SDK uses `model.input.includes("image")` without null checking.
+ * @see https://github.com/jiulingyun/openclaw-cn/issues/32
+ */
+function ensureModelInput<T extends Model<Api>>(model: T): T {
+  if (model.input && Array.isArray(model.input)) return model;
+  return { ...model, input: ["text"] };
+}
+
 export function normalizeModelCompat(model: Model<Api>): Model<Api> {
-  if (!isOpenAiCompletionsModel(model)) return model;
+  const safeModel = ensureModelInput(model);
+  if (!isOpenAiCompletionsModel(safeModel)) return safeModel;
 
   const baseUrl = model.baseUrl ?? "";
   // Providers that don't support developer role (must use system role instead)
@@ -14,9 +25,9 @@ export function normalizeModelCompat(model: Model<Api>): Model<Api> {
 
   if (!isZai && !isXiaomi) return model;
 
-  const openaiModel = model as Model<"openai-completions">;
+  const openaiModel = safeModel as Model<"openai-completions">;
   const compat = openaiModel.compat ?? undefined;
-  if (compat?.supportsDeveloperRole === false) return model;
+  if (compat?.supportsDeveloperRole === false) return safeModel;
 
   openaiModel.compat = compat
     ? { ...compat, supportsDeveloperRole: false }
