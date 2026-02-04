@@ -101,6 +101,74 @@ function getPlaceholder(type: string): string {
 }
 
 /**
+ * Extract image keys from a post (rich text) message content.
+ * Handles both direct format { title, content } and locale-wrapped format { post: { zh_cn: { title, content } } }
+ */
+export function extractPostImageKeys(content: any): string[] {
+  const imageKeys: string[] = [];
+
+  // Try to find the actual post content
+  // Format 1: { post: { zh_cn: { title, content } } }
+  // Format 2: { title, content } (direct)
+  let postData = content;
+  if (content.post && typeof content.post === "object") {
+    // Find the first locale key (zh_cn, en_us, etc.)
+    const localeKey = Object.keys(content.post).find(
+      (key) => content.post[key]?.content || content.post[key]?.title,
+    );
+    if (localeKey) {
+      postData = content.post[localeKey];
+    }
+  }
+
+  // Extract image_key from content blocks
+  if (Array.isArray(postData.content)) {
+    for (const line of postData.content) {
+      if (!Array.isArray(line)) continue;
+      for (const element of line) {
+        if (element.tag === "img" && element.image_key) {
+          imageKeys.push(element.image_key);
+        }
+      }
+    }
+  }
+
+  return imageKeys;
+}
+
+/**
+ * Download embedded images from a post (rich text) message.
+ * Returns an array of downloaded media references.
+ */
+export async function downloadPostImages(
+  client: Client,
+  messageId: string,
+  imageKeys: string[],
+  maxBytes: number = 30 * 1024 * 1024,
+  maxImages: number = 5,
+): Promise<FeishuMediaRef[]> {
+  const results: FeishuMediaRef[] = [];
+  const keysToDownload = imageKeys.slice(0, maxImages);
+
+  for (const imageKey of keysToDownload) {
+    try {
+      const media = await downloadFeishuMessageResource(
+        client,
+        messageId,
+        imageKey,
+        "image",
+        maxBytes,
+      );
+      results.push(media);
+    } catch (err) {
+      logger.error(`Failed to download post image ${imageKey}: ${err}`);
+    }
+  }
+
+  return results;
+}
+
+/**
  * Resolve media from a Feishu message
  * Returns the downloaded media reference or null if no media
  *

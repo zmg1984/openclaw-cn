@@ -16,7 +16,12 @@ import {
   type ResolvedFeishuConfig,
 } from "./config.js";
 import { resolveFeishuDocsFromMessage } from "./docs.js";
-import { resolveFeishuMedia, type FeishuMediaRef } from "./download.js";
+import {
+  resolveFeishuMedia,
+  downloadPostImages,
+  extractPostImageKeys,
+  type FeishuMediaRef,
+} from "./download.js";
 import { readFeishuAllowFromStore, upsertFeishuPairingRequest } from "./pairing-store.js";
 import { sendMessageFeishu } from "./send.js";
 import { FeishuStreamingSession } from "./streaming-card.js";
@@ -215,18 +220,33 @@ export async function processFeishuMessage(
     }
   } else if (msgType === "post") {
     // Extract text from rich text (post) message
+    // Handles both direct format { title, content } and locale-wrapped format { post: { zh_cn: { title, content } } }
     try {
       const content = JSON.parse(message.content);
       const parts: string[] = [];
 
+      // Try to find the actual post content
+      // Format 1: { post: { zh_cn: { title, content } } }
+      // Format 2: { title, content } (direct)
+      let postData = content;
+      if (content.post && typeof content.post === "object") {
+        // Find the first locale key (zh_cn, en_us, etc.)
+        const localeKey = Object.keys(content.post).find(
+          (key) => content.post[key]?.content || content.post[key]?.title,
+        );
+        if (localeKey) {
+          postData = content.post[localeKey];
+        }
+      }
+
       // Include title if present
-      if (content.title) {
-        parts.push(content.title);
+      if (postData.title) {
+        parts.push(postData.title);
       }
 
       // Extract text from content elements
-      if (Array.isArray(content.content)) {
-        for (const line of content.content) {
+      if (Array.isArray(postData.content)) {
+        for (const line of postData.content) {
           if (!Array.isArray(line)) continue;
           const lineParts: string[] = [];
           for (const element of line) {
@@ -287,11 +307,31 @@ export async function processFeishuMessage(
 
   // Resolve media if present (for image, file, audio, media, sticker types)
   let media: FeishuMediaRef | null = null;
+  let postImages: FeishuMediaRef[] = [];
   if (!["text", "post"].includes(msgType)) {
     try {
       media = await resolveFeishuMedia(client, message, maxMediaBytes);
     } catch (err) {
       logger.error(`Failed to download media: ${err}`);
+    }
+  } else if (msgType === "post") {
+    // Download embedded images from post (rich text) message
+    try {
+      const content = JSON.parse(message.content);
+      const imageKeys = extractPostImageKeys(content);
+      if (imageKeys.length > 0) {
+        logger.debug(`Found ${imageKeys.length} embedded images in post message`);
+        postImages = await downloadPostImages(
+          client,
+          message.message_id,
+          imageKeys,
+          maxMediaBytes,
+          5, // max 5 images
+        );
+        logger.debug(`Downloaded ${postImages.length} embedded images`);
+      }
+    } catch (err) {
+      logger.error(`Failed to download post images: ${err}`);
     }
   }
 
@@ -316,6 +356,11 @@ export async function processFeishuMessage(
   if (!bodyText && media) {
     bodyText = media.placeholder;
   }
+  // If we have embedded images from post message, add placeholders
+  if (postImages.length > 0 && !media) {
+    const imagePlaceholders = postImages.map(() => "<media:image>").join(" ");
+    bodyText = bodyText ? `${bodyText}\n${imagePlaceholders}` : imagePlaceholders;
+  }
 
   // Append document content if available
   if (docContent) {
@@ -323,7 +368,7 @@ export async function processFeishuMessage(
   }
 
   // Skip if no content
-  if (!bodyText && !media) {
+  if (!bodyText && !media && postImages.length === 0) {
     logger.debug(`Empty message after processing, skipping`);
     return;
   }
@@ -401,9 +446,12 @@ export async function processFeishuMessage(
     OriginatingChannel: "feishu",
     OriginatingTo: chatId,
     // Media fields (similar to Telegram)
-    MediaPath: media?.path,
-    MediaType: media?.contentType,
-    MediaUrl: media?.path,
+    MediaPath: media?.path ?? postImages[0]?.path,
+    MediaType: media?.contentType ?? postImages[0]?.contentType,
+    MediaUrl: media?.path ?? postImages[0]?.path,
+    // Multiple media from post messages
+    MediaPaths: postImages.length > 0 ? postImages.map((img) => img.path) : undefined,
+    MediaUrls: postImages.length > 0 ? postImages.map((img) => img.path) : undefined,
     WasMentioned: isGroup ? wasMentioned : undefined,
     // Command authorization - if message passed access control, sender is authorized
     CommandAuthorized: true,
