@@ -1,4 +1,5 @@
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
+import { migrateWorkspaceIfNeeded } from "../agents/workspace.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
 import { registerSkillsChangeListener } from "../agents/skills/refresh.js";
 import type { CanvasHostServer } from "../canvas-host/server.js";
@@ -150,6 +151,15 @@ export async function startGatewayServer(
 ): Promise<GatewayServer> {
   // Ensure all default port derivations (browser/canvas) see the actual runtime port.
   process.env.OPENCLAW_GATEWAY_PORT = String(port);
+
+  // Migrate legacy workspace directory (~/clawd -> ~/openclaw) on gateway startup
+  const migrationResult = await migrateWorkspaceIfNeeded();
+  if (migrationResult.migrated) {
+    log.info(
+      `gateway: migrated workspace directory from ${migrationResult.legacyDir} to ${migrationResult.newDir}`,
+    );
+  }
+
   logAcceptedEnvOption({
     key: "OPENCLAW_RAW_STREAM",
     description: "raw stream logging enabled",

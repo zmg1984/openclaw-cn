@@ -7,15 +7,34 @@ import { isSubagentSessionKey } from "../routing/session-key.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import { resolveUserPath } from "../utils.js";
 
+/** Legacy workspace directory name (for migration) */
+const LEGACY_WORKSPACE_NAME = "clawd";
+/** Current workspace directory name */
+const WORKSPACE_NAME = "openclaw";
+
 export function resolveDefaultAgentWorkspaceDir(
   env: NodeJS.ProcessEnv = process.env,
   homedir: () => string = os.homedir,
 ): string {
   const profile = env.OPENCLAW_PROFILE?.trim();
   if (profile && profile.toLowerCase() !== "default") {
-    return path.join(homedir(), `clawd-${profile}`);
+    return path.join(homedir(), `${WORKSPACE_NAME}-${profile}`);
   }
-  return path.join(homedir(), "clawd");
+  return path.join(homedir(), WORKSPACE_NAME);
+}
+
+/**
+ * Resolve the legacy workspace directory path (for migration).
+ */
+export function resolveLegacyAgentWorkspaceDir(
+  env: NodeJS.ProcessEnv = process.env,
+  homedir: () => string = os.homedir,
+): string {
+  const profile = env.OPENCLAW_PROFILE?.trim();
+  if (profile && profile.toLowerCase() !== "default") {
+    return path.join(homedir(), `${LEGACY_WORKSPACE_NAME}-${profile}`);
+  }
+  return path.join(homedir(), LEGACY_WORKSPACE_NAME);
 }
 
 export const DEFAULT_AGENT_WORKSPACE_DIR = resolveDefaultAgentWorkspaceDir();
@@ -111,6 +130,46 @@ async function ensureGitRepo(dir: string, isBrandNewWorkspace: boolean) {
   }
 }
 
+/**
+ * Migrate legacy workspace directory to new location.
+ * If ~/clawd exists and ~/openclaw does not, move ~/clawd to ~/openclaw.
+ * This ensures seamless upgrade for existing users.
+ */
+export async function migrateWorkspaceIfNeeded(params?: {
+  legacyDir?: string;
+  newDir?: string;
+}): Promise<{ migrated: boolean; legacyDir?: string; newDir?: string }> {
+  const legacyDir = params?.legacyDir ?? resolveLegacyAgentWorkspaceDir();
+  const newDir = params?.newDir ?? DEFAULT_AGENT_WORKSPACE_DIR;
+
+  // If legacy and new are the same, no migration needed
+  if (legacyDir === newDir) {
+    return { migrated: false };
+  }
+
+  try {
+    // Check if legacy directory exists
+    const legacyStat = await fs.stat(legacyDir).catch(() => null);
+    if (!legacyStat?.isDirectory()) {
+      return { migrated: false };
+    }
+
+    // Check if new directory already exists
+    const newStat = await fs.stat(newDir).catch(() => null);
+    if (newStat) {
+      // New directory already exists, don't overwrite
+      return { migrated: false };
+    }
+
+    // Move legacy directory to new location
+    await fs.rename(legacyDir, newDir);
+    return { migrated: true, legacyDir, newDir };
+  } catch {
+    // Migration failed, continue with normal workspace creation
+    return { migrated: false };
+  }
+}
+
 export async function ensureAgentWorkspace(params?: {
   dir?: string;
   ensureBootstrapFiles?: boolean;
@@ -126,6 +185,13 @@ export async function ensureAgentWorkspace(params?: {
 }> {
   const rawDir = params?.dir?.trim() ? params.dir.trim() : DEFAULT_AGENT_WORKSPACE_DIR;
   const dir = resolveUserPath(rawDir);
+
+  // Attempt to migrate legacy workspace before creating new one
+  // Only migrate if using default workspace path
+  if (!params?.dir?.trim() || params.dir.trim() === DEFAULT_AGENT_WORKSPACE_DIR) {
+    await migrateWorkspaceIfNeeded();
+  }
+
   await fs.mkdir(dir, { recursive: true });
 
   if (!params?.ensureBootstrapFiles) return { dir };
