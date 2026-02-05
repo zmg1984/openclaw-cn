@@ -163,17 +163,19 @@ openclaw-cn channels add
 
 编辑 `~/.openclaw/openclaw.json`：
 
-```json5
+> **提示**：配置文件支持 JSON5 格式（允许注释和尾随逗号），但以下示例使用标准 JSON 格式以便直接复制使用。
+
+```json
 {
-  channels: {
-    feishu: {
-      enabled: true,
-      dmPolicy: "pairing",
-      accounts: {
-        main: {
-          appId: "cli_xxx",
-          appSecret: "xxx",
-          botName: "我的AI助手"
+  "channels": {
+    "feishu": {
+      "enabled": true,
+      "dmPolicy": "pairing",
+      "accounts": {
+        "main": {
+          "appId": "cli_xxx",
+          "appSecret": "xxx",
+          "botName": "我的AI助手"
         }
       }
     }
@@ -252,27 +254,30 @@ openclaw-cn pairing approve feishu <配对码>
 
 ### 允许所有群组，需要 @提及（默认行为）
 
-```json5
+```json
 {
-  channels: {
-    feishu: {
-      groupPolicy: "open"
-      // 默认 requireMention: true
+  "channels": {
+    "feishu": {
+      "groupPolicy": "open"
     }
   }
 }
 ```
 
+> 注：默认 `requireMention: true`
+
 ### 允许所有群组，无需 @提及
 
 需要为特定群组配置：
 
-```json5
+```json
 {
-  channels: {
-    feishu: {
-      groups: {
-        "oc_xxx": { requireMention: false }
+  "channels": {
+    "feishu": {
+      "groups": {
+        "oc_xxx": {
+          "requireMention": false
+        }
       }
     }
   }
@@ -283,12 +288,12 @@ openclaw-cn pairing approve feishu <配对码>
 
 ### 仅允许特定用户在群组中使用
 
-```json5
+```json
 {
-  channels: {
-    feishu: {
-      groupPolicy: "allowlist",
-      groupAllowFrom: ["ou_xxx", "ou_yyy"]
+  "channels": {
+    "feishu": {
+      "groupPolicy": "allowlist",
+      "groupAllowFrom": ["ou_xxx", "ou_yyy"]
     }
   }
 }
@@ -387,27 +392,29 @@ openclaw-cn pairing list feishu
 
 如果需要管理多个飞书机器人：
 
-```json5
+```json
 {
-  channels: {
-    feishu: {
-      accounts: {
-        main: {
-          appId: "cli_xxx",
-          appSecret: "xxx",
-          botName: "主机器人"
+  "channels": {
+    "feishu": {
+      "accounts": {
+        "main": {
+          "appId": "cli_xxx",
+          "appSecret": "xxx",
+          "botName": "主机器人"
         },
-        backup: {
-          appId: "cli_yyy",
-          appSecret: "yyy",
-          botName: "备用机器人",
-          enabled: false  // 暂时禁用
+        "backup": {
+          "appId": "cli_yyy",
+          "appSecret": "yyy",
+          "botName": "备用机器人",
+          "enabled": false
         }
       }
     }
   }
 }
 ```
+
+> 注：将 `enabled` 设为 `false` 可暂时禁用某个账号
 
 ### 消息限制
 
@@ -420,16 +427,18 @@ openclaw-cn pairing list feishu
 
 **配置选项**：
 
-```json5
+```json
 {
-  channels: {
-    feishu: {
-      streaming: true,       // 启用流式卡片输出（默认 true）
-      blockStreaming: true   // 启用块级流式（默认 true）
+  "channels": {
+    "feishu": {
+      "streaming": true,
+      "blockStreaming": true
     }
   }
 }
 ```
+
+> 说明：`streaming` 启用流式卡片输出（默认 true），`blockStreaming` 启用块级流式（默认 true）
 
 > **注意**：流式卡片需要 `cardkit:card:write` 权限，请确保在飞书开放平台已配置此权限。
 
@@ -439,22 +448,22 @@ openclaw-cn pairing list feishu
 
 **配置选项**：
 
-```json5
+```json
 {
-  channels: {
-    feishu: {
-      // 账户级别配置（默认 "all"）
-      replyToMode: "all",
-      groups: {
+  "channels": {
+    "feishu": {
+      "replyToMode": "all",
+      "groups": {
         "oc_xxx": {
-          // 特定群组可以覆盖
-          replyToMode: "first"
+          "replyToMode": "first"
         }
       }
     }
   }
 }
 ```
+
+> 说明：`replyToMode` 可在账户级别配置（默认 "all"），特定群组可以覆盖此设置
 
 **replyToMode 值说明**：
 
@@ -472,46 +481,54 @@ openclaw-cn pairing list feishu
 
 **配置示例**：
 
-```json5
+```json
 {
-  agents: {
-    list: [
-      { id: "main" },
+  "agents": {
+    "list": [
       {
-        id: "clawd-fan",
-        workspace: "/home/user/clawd-fan",
-        agentDir: "/home/user/.openclaw/agents/clawd-fan/agent"
+        "id": "main"
       },
       {
-        id: "clawd-xi",
-        workspace: "/home/user/clawd-xi",
-        agentDir: "/home/user/.openclaw/agents/clawd-xi/agent"
+        "id": "clawd-fan",
+        "workspace": "/home/user/clawd-fan",
+        "agentDir": "/home/user/.openclaw/agents/clawd-fan/agent"
+      },
+      {
+        "id": "clawd-xi",
+        "workspace": "/home/user/clawd-xi",
+        "agentDir": "/home/user/.openclaw/agents/clawd-xi/agent"
       }
     ]
   },
-  bindings: [
+  "bindings": [
     {
-      // 用户 A 的私聊 → main agent
-      agentId: "main",
-      match: {
-        channel: "feishu",
-        peer: { kind: "dm", id: "ou_28b31a88..." }
+      "agentId": "main",
+      "match": {
+        "channel": "feishu",
+        "peer": {
+          "kind": "dm",
+          "id": "ou_28b31a88..."
+        }
       }
     },
     {
-      // 用户 B 的私聊 → clawd-fan agent
-      agentId: "clawd-fan",
-      match: {
-        channel: "feishu",
-        peer: { kind: "dm", id: "ou_0fe6b1c9..." }
+      "agentId": "clawd-fan",
+      "match": {
+        "channel": "feishu",
+        "peer": {
+          "kind": "dm",
+          "id": "ou_0fe6b1c9..."
+        }
       }
     },
     {
-      // 某个群组 → clawd-xi agent
-      agentId: "clawd-xi",
-      match: {
-        channel: "feishu",
-        peer: { kind: "group", id: "oc_xxx..." }
+      "agentId": "clawd-xi",
+      "match": {
+        "channel": "feishu",
+        "peer": {
+          "kind": "group",
+          "id": "oc_xxx..."
+        }
       }
     }
   ]
@@ -528,6 +545,62 @@ openclaw-cn pairing list feishu
 | `match.peer.id` | 用户 Open ID（`ou_xxx`）或群组 ID（`oc_xxx`） |
 
 **获取 ID 的方法**：参见上文 [获取群组/用户 ID](#获取群组用户-id) 章节。
+
+---
+
+## 完整配置示例
+
+以下是一个包含常用配置的完整示例，您可以根据需要修改：
+
+```json
+{
+  "channels": {
+    "feishu": {
+      "enabled": true,
+      "dmPolicy": "pairing",
+      "groupPolicy": "open",
+      "replyToMode": "all",
+      "streaming": true,
+      "blockStreaming": true,
+      "textChunkLimit": 2000,
+      "mediaMaxMb": 30,
+      "accounts": {
+        "main": {
+          "appId": "cli_xxxxxxxxxx",
+          "appSecret": "xxxxxxxxxxxxxxxxxxxxxxxx",
+          "botName": "我的AI助手"
+        }
+      },
+      "allowFrom": [
+        "ou_xxxxxxxxxxxxxxxxxxxx"
+      ],
+      "groupAllowFrom": [
+        "ou_xxxxxxxxxxxxxxxxxxxx",
+        "ou_yyyyyyyyyyyyyyyyyyyy"
+      ],
+      "groups": {
+        "oc_xxxxxxxxxxxxxxxxxxxx": {
+          "enabled": true,
+          "requireMention": false,
+          "replyToMode": "first"
+        }
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "~/clawd"
+    }
+  }
+}
+```
+
+**配置说明**：
+- `appId` / `appSecret`：替换为您在飞书开放平台获取的凭证
+- `allowFrom`：私聊白名单，填写允许私聊的用户 Open ID
+- `groupAllowFrom`：群组白名单，填写允许在群组中使用的用户 Open ID
+- `groups`：针对特定群组的配置，键为群组 ID（`oc_xxx`）
+- `workspace`：Agent 的工作目录
 
 ---
 
