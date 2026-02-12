@@ -1,5 +1,4 @@
 import { listFeishuAccountIds, resolveDefaultFeishuAccountId, resolveFeishuAccount, promptAccountId, normalizeAccountId, DEFAULT_ACCOUNT_ID, } from "openclaw/plugin-sdk";
-/** @type {import("openclaw/plugin-sdk").ChannelOnboardingAdapter} */
 export const feishuOnboardingAdapter = {
     channel: "feishu",
     getStatus: async ({ cfg }) => {
@@ -46,14 +45,14 @@ export const feishuOnboardingAdapter = {
         }
         // Prompt for domain (Feishu China vs Lark International) first
         const currentDomain = resolved.config.domain ?? "feishu";
-        const domain = await prompter.select({
+        const domain = (await prompter.select({
             message: "选择平台 / Select platform",
             options: [
                 { value: "feishu", label: "飞书（国内版）", hint: "open.feishu.cn" },
                 { value: "lark", label: "Lark（国际版）", hint: "open.larksuite.com" },
             ],
             initialValue: currentDomain,
-        });
+        }));
         const platformLabel = domain === "lark" ? "Lark" : "飞书";
         let appId = resolved.config.appId;
         if (!appId) {

@@ -11,13 +11,13 @@ import {
   monitorFeishuProvider,
   type ChannelPlugin,
   type ResolvedFeishuAccount,
-  type ClawdbotConfig,
+  type OpenClawConfig as ClawdbotConfig,
 } from "openclaw/plugin-sdk";
 import { feishuOnboardingAdapter } from "./onboarding.js";
 import { FeishuAccountSchema } from "./config-schema.js";
 import { getFeishuRuntime } from "./runtime.js";
 
-const meta = getChatChannelMeta("feishu");
+const meta = getChatChannelMeta("feishu" as any);
 
 export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
   id: "feishu",

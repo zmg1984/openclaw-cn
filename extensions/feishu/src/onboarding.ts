@@ -1,9 +1,11 @@
 import type {
   ChannelOnboardingAdapter,
-  ClawdbotConfig,
-  FeishuDomain,
+  OpenClawConfig as ClawdbotConfig,
   WizardPrompter,
 } from "openclaw/plugin-sdk";
+
+/** Feishu domain: "feishu" (China) or "lark" (International). */
+type FeishuDomain = "feishu" | "lark";
 import {
   listFeishuAccountIds,
   resolveDefaultFeishuAccountId,
