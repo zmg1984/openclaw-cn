@@ -45,6 +45,12 @@ import { searchKeyword, searchVector } from "./manager-search.js";
 import { ensureMemoryIndexSchema } from "./memory-schema.js";
 import { requireNodeSqlite } from "./sqlite.js";
 import { loadSqliteVecExtension } from "./sqlite-vec.js";
+import type {
+  MemoryEmbeddingProbeResult,
+  MemoryProviderStatus,
+  MemorySearchManager,
+  MemorySyncProgressUpdate as MemorySyncProgressUpdateType,
+} from "./types.js";
 
 type MemorySource = "memory" | "sessions";
 
@@ -115,7 +121,7 @@ const INDEX_CACHE = new Map<string, MemoryIndexManager>();
 const vectorToBlob = (embedding: number[]): Buffer =>
   Buffer.from(new Float32Array(embedding).buffer);
 
-export class MemoryIndexManager {
+export class MemoryIndexManager implements MemorySearchManager {
   private readonly cacheKey: string;
   private readonly cfg: ClawdbotConfig;
   private readonly agentId: string;
@@ -415,39 +421,7 @@ export class MemoryIndexManager {
     return { text: slice.join("\n"), path: relPath };
   }
 
-  status(): {
-    files: number;
-    chunks: number;
-    dirty: boolean;
-    workspaceDir: string;
-    dbPath: string;
-    provider: string;
-    model: string;
-    requestedProvider: string;
-    sources: MemorySource[];
-    sourceCounts: Array<{ source: MemorySource; files: number; chunks: number }>;
-    cache?: { enabled: boolean; entries?: number; maxEntries?: number };
-    fts?: { enabled: boolean; available: boolean; error?: string };
-    fallback?: { from: string; reason?: string };
-    vector?: {
-      enabled: boolean;
-      available?: boolean;
-      extensionPath?: string;
-      loadError?: string;
-      dims?: number;
-    };
-    batch?: {
-      enabled: boolean;
-      failures: number;
-      limit: number;
-      wait: boolean;
-      concurrency: number;
-      pollIntervalMs: number;
-      timeoutMs: number;
-      lastError?: string;
-      lastProvider?: string;
-    };
-  } {
+  status(): MemoryProviderStatus {
     const sourceFilter = this.buildSourceFilter();
     const files = this.db
       .prepare(`SELECT COUNT(*) as c FROM files WHERE 1=1${sourceFilter.sql}`)
@@ -489,6 +463,7 @@ export class MemoryIndexManager {
       return sources.map((source) => ({ source, ...bySource.get(source)! }));
     })();
     return {
+      backend: "builtin" as const,
       files: files?.c ?? 0,
       chunks: chunks?.c ?? 0,
       dirty: this.dirty,
