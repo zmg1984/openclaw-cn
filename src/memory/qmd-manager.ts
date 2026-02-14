@@ -936,7 +936,39 @@ export class QmdMemoryManager implements MemorySearchManager {
     if (names.length === 0) {
       return [];
     }
-    return names.flatMap((name) => ["-c", name]);
+    // Skip collections with zero indexed documents — QMD returns "No results
+    // found" when a query includes an empty collection alongside populated
+    // ones, which causes the entire search to return nothing.
+    const populated = this.getPopulatedCollections(names);
+    if (populated.length === 0) {
+      return [];
+    }
+    return populated.flatMap((name) => ["-c", name]);
+  }
+
+  /**
+   * Return the subset of `names` that have at least one active document in the
+   * QMD index.  Falls back to the full list if the index cannot be read.
+   */
+  private getPopulatedCollections(names: string[]): string[] {
+    try {
+      const db = this.ensureDb();
+      const rows = db
+        .prepare("SELECT DISTINCT collection FROM documents WHERE active = 1")
+        .all() as Array<{ collection: string }>;
+      const populated = new Set(rows.map((r) => r.collection));
+      const filtered = names.filter((n) => populated.has(n));
+      if (filtered.length < names.length) {
+        const skipped = names.filter((n) => !populated.has(n));
+        log.debug(`skipping empty collections: ${skipped.join(", ")}`);
+      }
+      return filtered;
+    } catch {
+      // If the index is not accessible (busy, missing, etc.), fall back to
+      // including all collections — better to let qmd decide than to
+      // silently skip everything.
+      return names;
+    }
   }
 
   private buildSearchArgs(
