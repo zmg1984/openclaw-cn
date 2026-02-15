@@ -300,7 +300,7 @@ export async function promptModelAllowlist(params: {
     const raw = await params.prompter.text({
       message: params.message ?? "允许列表模型（以逗号分隔的提供商/模型；留空以保持当前）",
       initialValue: existingKeys.join(", "),
-      placeholder: "openai-codex/gpt-5.2, anthropic/claude-opus-4-5",
+      placeholder: "openai-codex/gpt-5.2, anthropic/claude-opus-4-6",
     });
     const parsed = String(raw ?? "")
       .split(",")
