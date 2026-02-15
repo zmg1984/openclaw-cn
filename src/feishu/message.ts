@@ -188,13 +188,13 @@ export async function processFeishuMessage(
                 senderId,
                 {
                   text: [
-                    "OpenClaw access not configured.",
+                    "OpenClaw 访问未配置。",
                     "",
-                    `Your Feishu Open ID: ${senderId}`,
+                    `你的飞书 Open ID：${senderId}`,
                     "",
-                    `Pairing code: ${code}`,
+                    `配对码：${code}`,
                     "",
-                    "Ask the OpenClaw admin to approve with:",
+                    "请联系 OpenClaw 管理员执行以下命令以批准：",
                     `openclaw pairing approve feishu ${code}`,
                   ].join("\n"),
                 },
