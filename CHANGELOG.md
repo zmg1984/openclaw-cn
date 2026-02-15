@@ -7,6 +7,32 @@ Docs: https://docs.clawd.bot
 > 🔒 **安全加固**：同步上游 73 项安全修复（P0-A + P0-B + P0-C），覆盖 v2026.2.1 ~ v2026.2.14 全部安全补丁。
 > 🐛 **关键 Bug 修复**：同步上游 48 项关键 Bug 修复（P1-A ~ P1-D），涵盖会话/网关/定时任务/心跳/内存/CJK 等核心稳定性问题。
 > ✨ **核心功能同步**：同步上游 37 项核心功能改进（P2-A ~ P2-E），覆盖 Agent/会话管理、Cron 增强、Config 改进等。
+> 🤖 **模型/Provider 支持**：同步上游 17 项模型与 Provider 支持（P3-A + P3-B），覆盖中国 Provider、新模型、国际 Provider 等。
+
+### 🤖 模型 / Provider 支持（Model & Provider）
+
+#### P3-A：中国相关 Provider
+
+- **月之暗面 Moonshot**：Onboarding 新增 Moonshot (.cn) 认证选项 + China base URL（upstream #7180）
+- **智谱 Z.AI**：新增 Z.AI 端点认证选项 + 模型目录（upstream #13456）
+- **GLM-5**：新增 GLM-5 合成模型目录支持（upstream #15867）
+- **MiniMax M2.5**：更新 MiniMax 默认模型到 M2.5（upstream #14865）
+- **MiniMax Provider 修复**：将 MiniMax API-key provider 切换到 anthropic-messages（upstream #15297）
+
+#### P3-B：国际 Provider
+
+- **Claude Opus 4.6**：新增 Claude Opus 4.6 内置模型目录（upstream #9853）
+- **Antigravity Opus 4.6**：Opus 4.6 前向兼容 + thinking 签名清理（upstream #14218）
+- **gpt-5.3-codex**：新增 gpt-5.3-codex 严格回退（upstream #9995）
+- **gpt-5.3-codex-spark**：新增 Codex Spark 前向兼容模型（upstream #14990, #15174）
+- **Codex OAuth**：实现 Codex OAuth 登录流程（upstream #15406）
+- **xAI Grok**：新增 xAI (Grok) Provider 支持（upstream #9885）
+- **Hugging Face**：新增 Hugging Face Inference Provider（upstream #13472）
+- **Cloudflare AI Gateway**：新增 Cloudflare AI Gateway Provider（upstream #7914）
+- **HTTP 400 容错**：将 HTTP 400 视为 failover 可选状态（upstream #1879）
+- **GitHub Copilot xhigh**：允许 github-copilot 模型使用 xhigh thinking（upstream #11646）
+- **Ollama baseUrl**：使用配置的 baseUrl 进行 Ollama 模型发现（upstream #14131）
+- **Ollama 原生流式**：新增 Ollama 原生 /api/chat 流式 + 工具调用 Provider（upstream #11853）
 
 ### ✨ 核心功能（Core Features）
 

@@ -13,8 +13,8 @@
 | P0-SECURITY | 安全修复 | 73 | ✅ 全部完成 |
 | P1-CRITICAL-BUG | 关键 Bug 修复 | 48 | ✅ 全部完成（#26, #32, #35, #36b 已包含/跳过） |
 | P2-CORE-FEATURE | 核心新功能 | 37 | ✅ 全部完成（#14 已包含在 #12、#20 已包含在 #16、#25/#34/#36 已包含/跳过） |
-| P3-CHANNEL-BUG | 渠道 Bug 修复 | — | 待开始 |
-| P4-CHANNEL-FEATURE | 渠道新功能 | — | 待开始 |
+| P3-MODEL | 模型/Provider 支持 | 17 | ✅ 全部完成（#7 CHANGELOG-only→找到实际提交、#12 vLLM 已包含、#15 CHANGELOG-only→找到实际提交） |
+| P4-CHANNEL | 渠道 Bug 修复 | — | 待开始 |
 | P5-NICE-TO-HAVE | 可选改进 | — | 待开始 |
 
 ## 已合并的上游提交
@@ -285,28 +285,28 @@
 
 | # | 上游 PR | Release | 描述 | 备注 |
 |---|---------|---------|------|------|
-| 1 | #7180 | v2026.2.3 | **Onboarding: add Moonshot (.cn) auth choice + China base URL** | ⚡ 月之暗面 |
-| 2 | #13456 | v2026.2.12 | **Onboarding: add Z.AI endpoint-specific auth choices (zai-cn)** | ⚡ 智谱 AI |
-| 3 | #15867 | v2026.2.13 | **Agents: add GLM-5 synthetic catalog support** | ⚡ 智谱 GLM-5 |
-| 4 | #14865 | v2026.2.12 | Onboarding: update MiniMax default models to M2.5 | MiniMax 更新 |
-| 5 | #15275 | v2026.2.13 | Providers/MiniMax: switch implicit provider to anthropic-messages | MiniMax 修复 |
+| 1 ✅ | #7180 | v2026.2.3 | **Onboarding: add Moonshot (.cn) auth choice + China base URL** | ⚡ 月之暗面 |
+| 2 ✅ | #13456 | v2026.2.12 | **Onboarding: add Z.AI endpoint-specific auth choices (zai-cn)** | ⚡ 智谱 AI |
+| 3 ✅ | #15867 | v2026.2.13 | **Agents: add GLM-5 synthetic catalog support** | ⚡ 智谱 GLM-5 |
+| 4 ✅ | #14865 | v2026.2.12 | Onboarding: update MiniMax default models to M2.5 | MiniMax 更新 |
+| 5 ✅ | #15275 | v2026.2.13 | Providers/MiniMax: switch implicit provider to anthropic-messages | MiniMax 修复 |
 
 ### P3-B：国际 Provider
 
 | # | 上游 PR | Release | 描述 | 备注 |
 |---|---------|---------|------|------|
-| 6 | #9853, #10720, #9995 | v2026.2.6 | Models: support Anthropic Opus 4.6 and OpenAI Codex gpt-5.3-codex | 新模型 |
-| 7 | #9885 | v2026.2.6 | **Providers: add xAI (Grok) support** | 新 Provider |
-| 8 | #14218 | v2026.2.12 | Antigravity: add opus 4.6 forward-compat | Opus 4.6 |
-| 9 | #14990, #15174 | v2026.2.13 | OpenAI Codex/Spark: implement gpt-5.3-codex-spark support | Codex Spark |
-| 10 | #15406 | v2026.2.13 | Auth/OpenAI Codex: share OAuth login handling | Codex OAuth |
-| 11 | #13472 | v2026.2.13 | Onboarding: add Hugging Face Inference provider | HuggingFace |
-| 12 | #12577 | v2026.2.13 | Onboarding: add vLLM as onboarding provider | vLLM |
-| 13 | #7914 | v2026.2.3 | Onboarding: add Cloudflare AI Gateway provider setup | Cloudflare |
-| 14 | #1879 | v2026.2.9 | Model failover: treat HTTP 400 as failover-eligible | 容错 |
-| 15 | #11646 | v2026.2.9 | Thinking: allow xhigh for github-copilot models | Copilot |
-| 16 | #14131 | v2026.2.12 | Ollama: use configured baseUrl for model discovery | Ollama |
-| 17 | #11853 | v2026.2.13 | Ollama/Agents: use resolved model/provider base URLs for native streaming | Ollama 流式 |
+| 6 ✅ | #9853, #10720, #9995 | v2026.2.6 | Models: support Anthropic Opus 4.6 and OpenAI Codex gpt-5.3-codex | 新模型 |
+| 7 ✅ | #9885 | v2026.2.6 | **Providers: add xAI (Grok) support** | 新 Provider |
+| 8 ✅ | #14218 | v2026.2.12 | Antigravity: add opus 4.6 forward-compat | Opus 4.6 |
+| 9 ✅ | #14990, #15174 | v2026.2.13 | OpenAI Codex/Spark: implement gpt-5.3-codex-spark support | Codex Spark |
+| 10 ✅ | #15406 | v2026.2.13 | Auth/OpenAI Codex: share OAuth login handling | Codex OAuth |
+| 11 ✅ | #13472 | v2026.2.13 | Onboarding: add Hugging Face Inference provider | HuggingFace |
+| 12 ✅ | #12577 | v2026.2.13 | Onboarding: add vLLM as onboarding provider | vLLM |
+| 13 ✅ | #7914 | v2026.2.3 | Onboarding: add Cloudflare AI Gateway provider setup | Cloudflare |
+| 14 ✅ | #1879 | v2026.2.9 | Model failover: treat HTTP 400 as failover-eligible | 容错 |
+| 15 ✅ | #11646 | v2026.2.9 | Thinking: allow xhigh for github-copilot models | Copilot |
+| 16 ✅ | #14131 | v2026.2.12 | Ollama: use configured baseUrl for model discovery | Ollama |
+| 17 ✅ | #11853 | v2026.2.13 | Ollama/Agents: use resolved model/provider base URLs for native streaming | Ollama 流式 |
 
 ---
 
