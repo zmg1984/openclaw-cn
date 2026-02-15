@@ -2,6 +2,7 @@ import { Type } from "@sinclair/typebox";
 
 import type { ClawdbotConfig } from "../../config/config.js";
 import { formatCliCommand } from "../../cli/command-format.js";
+import { wrapWebContent } from "../../security/external-content.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readNumberParam, readStringParam } from "./common.js";
 import {
@@ -363,7 +364,13 @@ async function runWebSearch(params: {
       provider: params.provider,
       model: params.perplexityModel ?? DEFAULT_PERPLEXITY_MODEL,
       tookMs: Date.now() - start,
-      content,
+      externalContent: {
+        untrusted: true,
+        source: "web_search",
+        provider: params.provider,
+        wrapped: true,
+      },
+      content: wrapWebContent(content),
       citations,
     };
     writeCache(SEARCH_CACHE, cacheKey, payload, params.cacheTtlMs);
@@ -422,6 +429,12 @@ async function runWebSearch(params: {
     provider: params.provider,
     count: mapped.length,
     tookMs: Date.now() - start,
+    externalContent: {
+      untrusted: true,
+      source: "web_search",
+      provider: params.provider,
+      wrapped: true,
+    },
     results: mapped,
   };
   writeCache(SEARCH_CACHE, cacheKey, payload, params.cacheTtlMs);

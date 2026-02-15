@@ -330,12 +330,13 @@ async function runWebFetch(params: {
         title: firecrawl.title,
         extractMode: params.extractMode,
         extractor: "firecrawl",
+        externalContent: {
+          untrusted: true,
+          source: "web_fetch",
+          wrapped: true,
+        },
         truncated: truncated.truncated,
         length: truncated.text.length,
-        fetchedAt: new Date().toISOString(),
-        tookMs: Date.now() - start,
-        text: truncated.text,
-        warning: firecrawl.warning,
       };
       writeCache(FETCH_CACHE, cacheKey, payload, params.cacheTtlMs);
       return payload;
@@ -366,12 +367,13 @@ async function runWebFetch(params: {
           title: firecrawl.title,
           extractMode: params.extractMode,
           extractor: "firecrawl",
+          externalContent: {
+            untrusted: true,
+            source: "web_fetch",
+            wrapped: true,
+          },
           truncated: truncated.truncated,
           length: truncated.text.length,
-          fetchedAt: new Date().toISOString(),
-          tookMs: Date.now() - start,
-          text: truncated.text,
-          warning: firecrawl.warning,
         };
         writeCache(FETCH_CACHE, cacheKey, payload, params.cacheTtlMs);
         return payload;
@@ -438,11 +440,13 @@ async function runWebFetch(params: {
       title,
       extractMode: params.extractMode,
       extractor,
+      externalContent: {
+        untrusted: true,
+        source: "web_fetch",
+        wrapped: true,
+      },
       truncated: truncated.truncated,
       length: truncated.text.length,
-      fetchedAt: new Date().toISOString(),
-      tookMs: Date.now() - start,
-      text: truncated.text,
     };
     writeCache(FETCH_CACHE, cacheKey, payload, params.cacheTtlMs);
     return payload;

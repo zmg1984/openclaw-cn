@@ -67,6 +67,7 @@ export type ExternalContentSource =
   | "email"
   | "webhook"
   | "api"
+  | "browser"
   | "channel_metadata"
   | "web_search"
   | "web_fetch"
@@ -76,6 +77,7 @@ const EXTERNAL_SOURCE_LABELS: Record<ExternalContentSource, string> = {
   email: "Email",
   webhook: "Webhook",
   api: "API",
+  browser: "Browser",
   channel_metadata: "Channel metadata",
   web_search: "Web Search",
   web_fetch: "Web Fetch",
@@ -259,4 +261,12 @@ export function getHookType(sessionKey: string): ExternalContentSource {
   if (sessionKey.startsWith("hook:webhook:")) return "webhook";
   if (sessionKey.startsWith("hook:")) return "webhook";
   return "unknown";
+}
+
+export function wrapWebContent(
+  content: string,
+  source: "web_search" | "web_fetch" = "web_search",
+): string {
+  const includeWarning = source === "web_fetch";
+  return wrapExternalContent(content, { source, includeWarning });
 }
