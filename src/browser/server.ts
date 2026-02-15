@@ -4,6 +4,8 @@ import express from "express";
 import { loadConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveBrowserConfig, resolveProfile, shouldStartLocalBrowserServer } from "./config.js";
+import { ensureBrowserControlAuth, resolveBrowserControlAuth } from "./control-auth.js";
+import { browserMutationGuardMiddleware } from "./csrf.js";
 import { ensureChromeExtensionRelayServer } from "./extension-relay.js";
 import { registerBrowserRoutes } from "./routes/index.js";
 import { type BrowserServerState, createBrowserRouteContext } from "./server-context.js";
@@ -28,6 +30,7 @@ export async function startBrowserControlServerFromConfig(): Promise<BrowserServ
 
   const app = express();
   app.use(express.json({ limit: "1mb" }));
+  app.use(browserMutationGuardMiddleware());
 
   const ctx = createBrowserRouteContext({
     getState: () => state,
