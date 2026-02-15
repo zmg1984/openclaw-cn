@@ -1,9 +1,6 @@
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { SsrFPolicy } from "../infra/net/ssrf.js";
-import { STATE_DIR } from "../config/paths.js";
 import { logVerbose, shouldLogVerbose } from "../globals.js";
 import { type MediaKind, maxBytesForKind, mediaKindFromMime } from "../media/constants.js";
 import { fetchRemoteMedia } from "../media/fetch.js";
@@ -26,50 +23,7 @@ export type WebMediaResult = {
 type WebMediaOptions = {
   maxBytes?: number;
   optimizeImages?: boolean;
-  ssrfPolicy?: SsrFPolicy;
-  /** Allowed root directories for local path reads. "any" skips the check (caller already validated). */
-  localRoots?: string[] | "any";
-  readFile?: (filePath: string) => Promise<Buffer>;
 };
-
-export function getDefaultLocalRoots(): string[] {
-  return [
-    os.tmpdir(),
-    path.join(STATE_DIR, "media"),
-    path.join(STATE_DIR, "agents"),
-    path.join(STATE_DIR, "workspace"),
-    path.join(STATE_DIR, "sandboxes"),
-  ];
-}
-
-async function assertLocalMediaAllowed(
-  mediaPath: string,
-  localRoots: string[] | "any" | undefined,
-): Promise<void> {
-  if (localRoots === "any") {
-    return;
-  }
-  const roots = localRoots ?? getDefaultLocalRoots();
-  // Resolve symlinks so a symlink under /tmp pointing to /etc/passwd is caught.
-  let resolved: string;
-  try {
-    resolved = await fs.realpath(mediaPath);
-  } catch {
-    resolved = path.resolve(mediaPath);
-  }
-  for (const root of roots) {
-    let resolvedRoot: string;
-    try {
-      resolvedRoot = await fs.realpath(root);
-    } catch {
-      resolvedRoot = path.resolve(root);
-    }
-    if (resolved === resolvedRoot || resolved.startsWith(resolvedRoot + path.sep)) {
-      return;
-    }
-  }
-  throw new Error(`Local media path is not under an allowed directory: ${mediaPath}`);
-}
 
 const HEIC_MIME_RE = /^image\/hei[cf]$/i;
 const HEIC_EXT_RE = /\.(heic|heif)$/i;
@@ -168,16 +122,7 @@ async function loadWebMediaInternal(
   mediaUrl: string,
   options: WebMediaOptions = {},
 ): Promise<WebMediaResult> {
-  const {
-    maxBytes,
-    optimizeImages = true,
-    ssrfPolicy,
-    localRoots,
-    readFile: readFileOverride,
-  } = options;
-  // Strip MEDIA: prefix used by agent tools (e.g. TTS) to tag media paths.
-  // Be lenient: LLM output may add extra whitespace (e.g. "  MEDIA :  /tmp/x.png").
-  mediaUrl = mediaUrl.replace(/^\s*MEDIA\s*:\s*/i, "");
+  const { maxBytes, optimizeImages = true } = options;
   // Use fileURLToPath for proper handling of file:// URLs (handles file://localhost/path, etc.)
   if (mediaUrl.startsWith("file://")) {
     try {
@@ -264,7 +209,7 @@ async function loadWebMediaInternal(
         : optimizeImages
           ? Math.max(maxBytes, defaultFetchCap)
           : maxBytes;
-    const fetched = await fetchRemoteMedia({ url: mediaUrl, maxBytes: fetchCap, ssrfPolicy });
+    const fetched = await fetchRemoteMedia({ url: mediaUrl, maxBytes: fetchCap });
     const { buffer, contentType, fileName } = fetched;
     const kind = mediaKindFromMime(contentType);
     return await clampAndFinalize({ buffer, contentType, kind, fileName });
@@ -275,11 +220,8 @@ async function loadWebMediaInternal(
     mediaUrl = resolveUserPath(mediaUrl);
   }
 
-  // Guard local reads against allowed directory roots to prevent file exfiltration.
-  await assertLocalMediaAllowed(mediaUrl, localRoots);
-
   // Local path
-  const data = readFileOverride ? await readFileOverride(mediaUrl) : await fs.readFile(mediaUrl);
+  const data = await fs.readFile(mediaUrl);
   const mime = await detectMime({ buffer: data, filePath: mediaUrl });
   const kind = mediaKindFromMime(mime);
   let fileName = path.basename(mediaUrl) || undefined;
@@ -297,40 +239,19 @@ async function loadWebMediaInternal(
   });
 }
 
-export async function loadWebMedia(
-  mediaUrl: string,
-  maxBytesOrOptions?: number | WebMediaOptions,
-  options?: { ssrfPolicy?: SsrFPolicy; localRoots?: string[] | "any" },
-): Promise<WebMediaResult> {
-  if (typeof maxBytesOrOptions === "number" || maxBytesOrOptions === undefined) {
-    return await loadWebMediaInternal(mediaUrl, {
-      maxBytes: maxBytesOrOptions,
-      optimizeImages: true,
-      ssrfPolicy: options?.ssrfPolicy,
-      localRoots: options?.localRoots,
-    });
-  }
+export async function loadWebMedia(mediaUrl: string, maxBytes?: number): Promise<WebMediaResult> {
   return await loadWebMediaInternal(mediaUrl, {
-    ...maxBytesOrOptions,
-    optimizeImages: maxBytesOrOptions.optimizeImages ?? true,
+    maxBytes,
+    optimizeImages: true,
   });
 }
 
 export async function loadWebMediaRaw(
   mediaUrl: string,
-  maxBytesOrOptions?: number | WebMediaOptions,
-  options?: { ssrfPolicy?: SsrFPolicy; localRoots?: string[] | "any" },
+  maxBytes?: number,
 ): Promise<WebMediaResult> {
-  if (typeof maxBytesOrOptions === "number" || maxBytesOrOptions === undefined) {
-    return await loadWebMediaInternal(mediaUrl, {
-      maxBytes: maxBytesOrOptions,
-      optimizeImages: false,
-      ssrfPolicy: options?.ssrfPolicy,
-      localRoots: options?.localRoots,
-    });
-  }
   return await loadWebMediaInternal(mediaUrl, {
-    ...maxBytesOrOptions,
+    maxBytes,
     optimizeImages: false,
   });
 }
