@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadConfig } from "../config/config.js";
+import type { SsrFPolicy } from "../infra/net/ssrf.js";
 import { logVerbose, shouldLogVerbose } from "../globals.js";
 import { type MediaKind, maxBytesForKind, mediaKindFromMime } from "../media/constants.js";
 import { resolveMediaLocalRoots } from "../media/local-roots.js";
@@ -29,6 +30,7 @@ type WebMediaOptions = {
   optimizeImages?: boolean;
   allowAnyLocal?: boolean;
   localRoots?: string[];
+  ssrfPolicy?: SsrFPolicy;
 };
 
 const HEIC_MIME_RE = /^image\/hei[cf]$/i;
@@ -139,7 +141,7 @@ async function loadWebMediaInternal(
   mediaUrl: string,
   options: WebMediaOptions = {},
 ): Promise<WebMediaResult> {
-  const { maxBytes, optimizeImages = true } = options;
+  const { maxBytes, optimizeImages = true, ssrfPolicy } = options;
   // Use fileURLToPath for proper handling of file:// URLs (handles file://localhost/path, etc.)
   if (mediaUrl.startsWith("file://")) {
     try {
@@ -217,7 +219,16 @@ async function loadWebMediaInternal(
   };
 
   if (/^https?:\/\//i.test(mediaUrl)) {
-    const fetched = await fetchRemoteMedia({ url: mediaUrl });
+    // Enforce a download cap during fetch to avoid unbounded memory usage.
+    // For optimized images, allow fetching larger payloads before compression.
+    const defaultFetchCap = maxBytesForKind("unknown");
+    const fetchCap =
+      maxBytes === undefined
+        ? defaultFetchCap
+        : optimizeImages
+          ? Math.max(maxBytes, defaultFetchCap)
+          : maxBytes;
+    const fetched = await fetchRemoteMedia({ url: mediaUrl, maxBytes: fetchCap, ssrfPolicy });
     const { buffer, contentType, fileName } = fetched;
     const kind = mediaKindFromMime(contentType);
     return await clampAndFinalize({ buffer, contentType, kind, fileName });
@@ -258,6 +269,7 @@ export async function loadWebMedia(
     ...options,
     maxBytes,
     optimizeImages: true,
+    ssrfPolicy: options?.ssrfPolicy,
   });
 }
 
@@ -270,6 +282,7 @@ export async function loadWebMediaRaw(
     ...options,
     maxBytes,
     optimizeImages: false,
+    ssrfPolicy: options?.ssrfPolicy,
   });
 }
 
