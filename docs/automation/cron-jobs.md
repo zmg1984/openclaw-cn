@@ -1,282 +1,448 @@
 ---
-summary: "网关调度器的定时任务 + 唤醒功能"
+summary: "Cron jobs + wakeups for the Gateway scheduler"
 read_when:
-  - 调度后台任务或唤醒
-  - 连接应该与心跳一起运行的自动化
-  - 在心跳和定时任务之间选择调度任务
+  - Scheduling background jobs or wakeups
+  - Wiring automation that should run with or alongside heartbeats
+  - Deciding between heartbeat and cron for scheduled tasks
+title: "Cron Jobs"
 ---
-# 定时任务（网关调度器）
 
-> **定时任务 vs 心跳？** 请参阅 [定时任务 vs 心跳](/automation/cron-vs-heartbeat) 了解何时使用每种方式。
+# Cron jobs (Gateway scheduler)
 
-定时任务是网关内置的调度器。它持久化任务，在正确的时间唤醒代理，并可选择将输出发送回聊天。
+> **Cron vs Heartbeat?** See [Cron vs Heartbeat](/automation/cron-vs-heartbeat) for guidance on when to use each.
 
-如果您想要 *"每天早上运行这个"* 或 *"20分钟后提醒代理"*，
-定时任务就是实现机制。
+Cron is the Gateway’s built-in scheduler. It persists jobs, wakes the agent at
+the right time, and can optionally deliver output back to a chat.
 
-## 简要说明
-- 定时任务在 **网关内部** 运行（不在模型内部）。
-- 任务持久化存储在 `~/.openclaw/cron/` 下，因此重启不会丢失计划。
-- 两种执行方式：
-  - **主会话**：排队系统事件，然后在下次心跳时运行。
-  - **独立**：在 `cron:<jobId>` 中运行专用代理回合，可选择发送输出。
-- 唤醒是一等公民：任务可以请求 "立即唤醒" 或 "下次心跳"。
+If you want _“run this every morning”_ or _“poke the agent in 20 minutes”_,
+cron is the mechanism.
 
-## 新手友好概述
-可以把定时任务看作：**何时** 运行 + **做什么**。
+## TL;DR
 
-1) **选择时间表**
-   - 一次性提醒 → `schedule.kind = "at"` (CLI: `--at`)
-   - 重复任务 → `schedule.kind = "every"` 或 `schedule.kind = "cron"`
-   - 如果您的 ISO 时间戳省略了时区，则视为 **UTC**。
+- Cron runs **inside the Gateway** (not inside the model).
+- Jobs persist under `~/.openclaw/cron/` so restarts don’t lose schedules.
+- Two execution styles:
+  - **Main session**: enqueue a system event, then run on the next heartbeat.
+  - **Isolated**: run a dedicated agent turn in `cron:<jobId>`, with delivery (announce by default or none).
+- Wakeups are first-class: a job can request “wake now” vs “next heartbeat”.
 
-2) **选择运行位置**
-   - `sessionTarget: "main"` → 在下次心跳时使用主上下文运行。
-   - `sessionTarget: "isolated"` → 在 `cron:<jobId>` 中运行专用代理回合。
+## Quick start (actionable)
 
-3) **选择载荷**
-   - 主会话 → `payload.kind = "systemEvent"`
-   - 独立会话 → `payload.kind = "agentTurn"`
+Create a one-shot reminder, verify it exists, and run it immediately:
 
-可选：`deleteAfterRun: true` 会在成功运行后从存储中删除一次性任务。
+```bash
+openclaw cron add \
+  --name "Reminder" \
+  --at "2026-02-01T16:00:00Z" \
+  --session main \
+  --system-event "Reminder: check the cron docs draft" \
+  --wake now \
+  --delete-after-run
 
-## 概念
+openclaw cron list
+openclaw cron run <job-id> --force
+openclaw cron runs --id <job-id>
+```
 
-### 任务
-定时任务是一个存储记录，包含：
-- **时间表**（何时运行），
-- **载荷**（做什么），
-- 可选的 **发送**（输出应发送到哪里）。
-- 可选的 **代理绑定**（`agentId`）：在特定代理下运行任务；如果
-  缺失或未知，网关会回退到默认代理。
+Schedule a recurring isolated job with delivery:
 
-任务通过稳定的 `jobId` 标识（CLI/网关 API 使用）。
-在代理工具调用中，`jobId` 是标准的；为了兼容性接受旧的 `id`。
-任务可以在成功的一次性运行后通过 `deleteAfterRun: true` 可选地自动删除。
+```bash
+openclaw cron add \
+  --name "Morning brief" \
+  --cron "0 7 * * *" \
+  --tz "America/Los_Angeles" \
+  --session isolated \
+  --message "Summarize overnight updates." \
+  --announce \
+  --channel slack \
+  --to "channel:C1234567890"
+```
 
-### 时间表
-定时任务支持三种时间表类型：
-- `at`：一次性时间戳（自纪元以来的毫秒数）。网关接受 ISO 8601 并强制转换为 UTC。
-- `every`：固定间隔（毫秒）。
-- `cron`：5字段的 cron 表达式，带可选的 IANA 时区。
+## Tool-call equivalents (Gateway cron tool)
 
-Cron 表达式使用 `croner`。如果省略时区，则使用网关主机的本地时区。
+For the canonical JSON shapes and examples, see [JSON schema for tool calls](/automation/cron-jobs#json-schema-for-tool-calls).
 
-### 主执行 vs 独立执行
+## Where cron jobs are stored
 
-#### 主会话任务（系统事件）
-主任务排队一个系统事件，并可选择唤醒心跳运行器。
-它们必须使用 `payload.kind = "systemEvent"`。
+Cron jobs are persisted on the Gateway host at `~/.openclaw/cron/jobs.json` by default.
+The Gateway loads the file into memory and writes it back on changes, so manual edits
+are only safe when the Gateway is stopped. Prefer `openclaw cron add/edit` or the cron
+tool call API for changes.
 
-- `wakeMode: "next-heartbeat"`（默认）：事件等待下一个计划的心跳。
-- `wakeMode: "now"`：事件触发立即心跳运行。
+## Beginner-friendly overview
 
-当您想要正常的 心跳提示 + 主会话上下文时，这是最佳选择。
-请参阅 [心跳](/gateway/heartbeat)。
+Think of a cron job as: **when** to run + **what** to do.
 
-#### 独立任务（专用定时会话）
-独立任务在会话 `cron:<jobId>` 中运行专用代理回合。
+1. **Choose a schedule**
+   - One-shot reminder → `schedule.kind = "at"` (CLI: `--at`)
+   - Repeating job → `schedule.kind = "every"` or `schedule.kind = "cron"`
+   - If your ISO timestamp omits a timezone, it is treated as **UTC**.
 
-关键行为：
-- 提示前缀为 `[cron:<jobId> <任务名称>]` 以便追踪。
-- 每次运行启动一个 **新的会话 ID**（没有先前对话的延续）。
-- 摘要发布到主会话（前缀 `Cron`，可配置）。
-- `wakeMode: "now"` 在发布摘要后触发立即心跳。
-- 如果 `payload.deliver: true`，输出被发送到频道；否则保持内部。
+2. **Choose where it runs**
+   - `sessionTarget: "main"` → run during the next heartbeat with main context.
+   - `sessionTarget: "isolated"` → run a dedicated agent turn in `cron:<jobId>`.
 
-对嘈杂、频繁或 "后台杂务" 使用独立任务，这些不应该刷屏
-您的主要聊天历史。
+3. **Choose the payload**
+   - Main session → `payload.kind = "systemEvent"`
+   - Isolated session → `payload.kind = "agentTurn"`
 
-### 载荷形状（运行什么）
-支持两种载荷类型：
-- `systemEvent`：仅主会话，通过心跳提示路由。
-- `agentTurn`：仅独立会话，运行专用代理回合。
+Optional: one-shot jobs (`schedule.kind = "at"`) delete after success by default. Set
+`deleteAfterRun: false` to keep them (they will disable after success).
 
-常见的 `agentTurn` 字段：
-- `message`：必需的文本提示。
-- `model` / `thinking`：可选覆盖（见下文）。
-- `timeoutSeconds`：可选超时覆盖。
-- `deliver`：`true` 将输出发送到频道目标。
-- `channel`：`last` 或特定频道。
-- `to`：频道特定目标（电话/聊天/频道 ID）。
-- `bestEffortDeliver`：如果发送失败则避免任务失败。
+## Concepts
 
-隔离选项（仅适用于 `session=isolated`）：
-- `postToMainPrefix` (CLI: `--post-prefix`)：主会话中系统事件的前缀。
-- `postToMainMode`：`summary`（默认）或 `full`。
-- `postToMainMaxChars`：当 `postToMainMode=full` 时的最大字符数（默认 8000）。
+### Jobs
 
-### 模型和思考级别覆盖
-独立任务（`agentTurn`）可以覆盖模型和思考级别：
-- `model`：提供商/模型字符串（例如，`anthropic/claude-sonnet-4-20250514`）或别名（例如，`opus`）
-- `thinking`：思考级别（`off`、`minimal`、`low`、`medium`、`high`、`xhigh`；仅限 GPT-5.2 + Codex 模型）
+A cron job is a stored record with:
 
-注意：您也可以在主会话任务上设置 `model`，但这会改变共享的主会话模型。我们建议仅对独立任务进行模型覆盖，以避免意外的上下文转换。
+- a **schedule** (when it should run),
+- a **payload** (what it should do),
+- optional **delivery mode** (announce or none).
+- optional **agent binding** (`agentId`): run the job under a specific agent; if
+  missing or unknown, the gateway falls back to the default agent.
 
-解析优先级：
-1. 任务载荷覆盖（最高）
-2. 钩子特定默认值（例如，`hooks.gmail.model`）
-3. 代理配置默认值
+Jobs are identified by a stable `jobId` (used by CLI/Gateway APIs).
+In agent tool calls, `jobId` is canonical; legacy `id` is accepted for compatibility.
+One-shot jobs auto-delete after success by default; set `deleteAfterRun: false` to keep them.
 
-### 发送（频道 + 目标）
-独立任务可以将输出发送到频道。任务载荷可以指定：
-- `channel`：`whatsapp` / `telegram` / `discord` / `slack` / `mattermost`（插件）/ `signal` / `imessage` / `last`
-- `to`：频道特定接收者目标
+### Schedules
 
-如果省略 `channel` 或 `to`，定时任务可以回退到主会话的 "最后路线"
-（代理上次回复的地方）。
+Cron supports three schedule kinds:
 
-发送说明：
-- 如果设置了 `to`，即使省略了 `deliver`，定时任务也会自动发送代理的最终输出。
-- 当您想要最后路线发送而不需要显式的 `to` 时，使用 `deliver: true`。
-- 使用 `deliver: false` 即使存在 `to` 也要保持输出内部。
+- `at`: one-shot timestamp via `schedule.at` (ISO 8601).
+- `every`: fixed interval (ms).
+- `cron`: 5-field cron expression with optional IANA timezone.
 
-目标格式提醒：
-- Slack/Discord/Mattermost（插件）目标应使用显式前缀（例如 `channel:<id>`、`user:<id>`）以避免歧义。
-- Telegram 主题应使用 `:topic:` 形式（见下文）。
+Cron expressions use `croner`. If a timezone is omitted, the Gateway host’s
+local timezone is used.
 
-#### Telegram 发送目标（主题 / 论坛帖子）
-Telegram 通过 `message_thread_id` 支持论坛主题。对于定时任务发送，您可以将
-主题/帖子编码到 `to` 字段中：
+### Main vs isolated execution
 
-- `-1001234567890`（仅聊天 ID）
-- `-1001234567890:topic:123`（首选：显式主题标记）
-- `-1001234567890:123`（简写：数字后缀）
+#### Main session jobs (system events)
 
-像 `telegram:...` / `telegram:group:...` 这样的前缀目标也被接受：
+Main jobs enqueue a system event and optionally wake the heartbeat runner.
+They must use `payload.kind = "systemEvent"`.
+
+- `wakeMode: "next-heartbeat"` (default): event waits for the next scheduled heartbeat.
+- `wakeMode: "now"`: event triggers an immediate heartbeat run.
+
+This is the best fit when you want the normal heartbeat prompt + main-session context.
+See [Heartbeat](/gateway/heartbeat).
+
+#### Isolated jobs (dedicated cron sessions)
+
+Isolated jobs run a dedicated agent turn in session `cron:<jobId>`.
+
+Key behaviors:
+
+- Prompt is prefixed with `[cron:<jobId> <job name>]` for traceability.
+- Each run starts a **fresh session id** (no prior conversation carry-over).
+- Default behavior: if `delivery` is omitted, isolated jobs announce a summary immediately (`delivery.mode = "announce"`).
+- `delivery.mode` (isolated-only) chooses what happens:
+  - `announce`: subagent-style summary delivered immediately to a chat.
+  - `none`: internal only (no delivery).
+
+Use isolated jobs for noisy, frequent, or "background chores" that shouldn't spam
+your main chat history.
+
+### Payload shapes (what runs)
+
+Two payload kinds are supported:
+
+- `systemEvent`: main-session only, routed through the heartbeat prompt.
+- `agentTurn`: isolated-session only, runs a dedicated agent turn.
+
+Common `agentTurn` fields:
+
+- `message`: required text prompt.
+- `model` / `thinking`: optional overrides (see below).
+- `timeoutSeconds`: optional timeout override.
+
+Delivery config (isolated jobs only):
+
+- `delivery.mode`: `none` | `announce`.
+- `delivery.channel`: `last` or a specific channel.
+- `delivery.to`: channel-specific target (phone/chat/channel id).
+- `delivery.bestEffort`: avoid failing the job if announce delivery fails.
+
+Announce delivery suppresses messaging tool sends for the run; use `delivery.channel`/`delivery.to`
+to target the chat instead.
+
+If `delivery` is omitted for isolated jobs, OpenClaw defaults to `announce`.
+
+### Model and thinking overrides
+
+Isolated jobs (`agentTurn`) can override the model and thinking level:
+
+- `model`: Provider/model string (e.g., `anthropic/claude-sonnet-4-20250514`) or alias (e.g., `opus`)
+- `thinking`: Thinking level (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`; GPT-5.2 + Codex models only)
+
+Note: You can set `model` on main-session jobs too, but it changes the shared main
+session model. We recommend model overrides only for isolated jobs to avoid
+unexpected context shifts.
+
+Resolution priority:
+
+1. Job payload override (highest)
+2. Hook-specific defaults (e.g., `hooks.gmail.model`)
+3. Agent config default
+
+### Delivery (channel + target)
+
+Isolated jobs can deliver output to a channel via the top-level `delivery` config:
+
+- `delivery.mode`: `announce` (subagent-style summary) or `none`.
+- `delivery.channel`: `whatsapp` / `telegram` / `discord` / `slack` / `mattermost` (plugin) / `signal` / `imessage` / `last`.
+- `delivery.to`: channel-specific recipient target.
+
+Delivery config is only valid for isolated jobs (`sessionTarget: "isolated"`).
+
+If `delivery.channel` or `delivery.to` is omitted, cron can fall back to the main session’s
+“last route” (the last place the agent replied).
+
+Target format reminders:
+
+- Slack/Discord/Mattermost (plugin) targets should use explicit prefixes (e.g. `channel:<id>`, `user:<id>`) to avoid ambiguity.
+- Telegram topics should use the `:topic:` form (see below).
+
+#### Telegram delivery targets (topics / forum threads)
+
+Telegram supports forum topics via `message_thread_id`. For cron delivery, you can encode
+the topic/thread into the `to` field:
+
+- `-1001234567890` (chat id only)
+- `-1001234567890:topic:123` (preferred: explicit topic marker)
+- `-1001234567890:123` (shorthand: numeric suffix)
+
+Prefixed targets like `telegram:...` / `telegram:group:...` are also accepted:
+
 - `telegram:group:-1001234567890:topic:123`
 
-## 存储和历史
-- 任务存储：`~/.openclaw/cron/jobs.json`（网关管理的 JSON）。
-- 运行历史：`~/.openclaw/cron/runs/<jobId>.jsonl`（JSONL，自动修剪）。
-- 覆盖存储路径：配置中的 `cron.store`。
+## JSON schema for tool calls
 
-## 配置
+Use these shapes when calling Gateway `cron.*` tools directly (agent tool calls or RPC).
+CLI flags accept human durations like `20m`, but tool calls should use an ISO 8601 string
+for `schedule.at` and milliseconds for `schedule.everyMs`.
+
+### cron.add params
+
+One-shot, main session job (system event):
+
+```json
+{
+  "name": "Reminder",
+  "schedule": { "kind": "at", "at": "2026-02-01T16:00:00Z" },
+  "sessionTarget": "main",
+  "wakeMode": "now",
+  "payload": { "kind": "systemEvent", "text": "Reminder text" },
+  "deleteAfterRun": true
+}
+```
+
+Recurring, isolated job with delivery:
+
+```json
+{
+  "name": "Morning brief",
+  "schedule": { "kind": "cron", "expr": "0 7 * * *", "tz": "America/Los_Angeles" },
+  "sessionTarget": "isolated",
+  "wakeMode": "next-heartbeat",
+  "payload": {
+    "kind": "agentTurn",
+    "message": "Summarize overnight updates."
+  },
+  "delivery": {
+    "mode": "announce",
+    "channel": "slack",
+    "to": "channel:C1234567890",
+    "bestEffort": true
+  }
+}
+```
+
+Notes:
+
+- `schedule.kind`: `at` (`at`), `every` (`everyMs`), or `cron` (`expr`, optional `tz`).
+- `schedule.at` accepts ISO 8601 (timezone optional; treated as UTC when omitted).
+- `everyMs` is milliseconds.
+- `sessionTarget` must be `"main"` or `"isolated"` and must match `payload.kind`.
+- Optional fields: `agentId`, `description`, `enabled`, `deleteAfterRun` (defaults to true for `at`),
+  `delivery`.
+- `wakeMode` defaults to `"next-heartbeat"` when omitted.
+
+### cron.update params
+
+```json
+{
+  "jobId": "job-123",
+  "patch": {
+    "enabled": false,
+    "schedule": { "kind": "every", "everyMs": 3600000 }
+  }
+}
+```
+
+Notes:
+
+- `jobId` is canonical; `id` is accepted for compatibility.
+- Use `agentId: null` in the patch to clear an agent binding.
+
+### cron.run and cron.remove params
+
+```json
+{ "jobId": "job-123", "mode": "force" }
+```
+
+```json
+{ "jobId": "job-123" }
+```
+
+## Storage & history
+
+- Job store: `~/.openclaw/cron/jobs.json` (Gateway-managed JSON).
+- Run history: `~/.openclaw/cron/runs/<jobId>.jsonl` (JSONL, auto-pruned).
+- Override store path: `cron.store` in config.
+
+## Configuration
 
 ```json5
 {
   cron: {
     enabled: true, // default true
     store: "~/.openclaw/cron/jobs.json",
-    maxConcurrentRuns: 1 // default 1
-  }
+    maxConcurrentRuns: 1, // default 1
+  },
 }
 ```
 
-完全禁用定时任务：
-- `cron.enabled: false`（配置）
-- `OPENCLAW_SKIP_CRON=1`（环境变量）
+Disable cron entirely:
 
-## CLI 快速入门
+- `cron.enabled: false` (config)
+- `OPENCLAW_SKIP_CRON=1` (env)
 
-一次性提醒（UTC ISO，成功后自动删除）：
+## CLI quickstart
+
+One-shot reminder (UTC ISO, auto-delete after success):
+
 ```bash
-openclaw-cn cron add \
-  --name "发送提醒" \
+openclaw cron add \
+  --name "Send reminder" \
   --at "2026-01-12T18:00:00Z" \
   --session main \
-  --system-event "提醒：提交费用报告。" \
+  --system-event "Reminder: submit expense report." \
   --wake now \
   --delete-after-run
 ```
 
-一次性提醒（主会话，立即唤醒）：
+One-shot reminder (main session, wake immediately):
+
 ```bash
-openclaw-cn cron add \
-  --name "日历检查" \
+openclaw cron add \
+  --name "Calendar check" \
   --at "20m" \
   --session main \
-  --system-event "下次心跳：检查日历。" \
+  --system-event "Next heartbeat: check calendar." \
   --wake now
 ```
 
-重复独立任务（发送到 WhatsApp）：
+Recurring isolated job (announce to WhatsApp):
+
 ```bash
-openclaw-cn cron add \
-  --name "早晨状态" \
+openclaw cron add \
+  --name "Morning status" \
   --cron "0 7 * * *" \
   --tz "America/Los_Angeles" \
   --session isolated \
-  --message "总结今天的收件箱 + 日历。" \
-  --deliver \
+  --message "Summarize inbox + calendar for today." \
+  --announce \
   --channel whatsapp \
   --to "+15551234567"
 ```
 
-重复独立任务（发送到 Telegram 主题）：
+Recurring isolated job (deliver to a Telegram topic):
+
 ```bash
-openclaw-cn cron add \
-  --name "夜间摘要（主题）" \
+openclaw cron add \
+  --name "Nightly summary (topic)" \
   --cron "0 22 * * *" \
   --tz "America/Los_Angeles" \
   --session isolated \
-  --message "总结今天；发送到夜间主题。" \
-  --deliver \
+  --message "Summarize today; send to the nightly topic." \
+  --announce \
   --channel telegram \
   --to "-1001234567890:topic:123"
 ```
 
-带模型和思考级别覆盖的独立任务：
+Isolated job with model and thinking override:
+
 ```bash
-openclaw-cn cron add \
-  --name "深度分析" \
+openclaw cron add \
+  --name "Deep analysis" \
   --cron "0 6 * * 1" \
   --tz "America/Los_Angeles" \
   --session isolated \
-  --message "每周项目进展深度分析。" \
+  --message "Weekly deep analysis of project progress." \
   --model "opus" \
   --thinking high \
-  --deliver \
+  --announce \
   --channel whatsapp \
   --to "+15551234567"
-
-代理选择（多代理设置）：
-```bash
-# 将任务固定到代理 "ops"（如果该代理缺失则回退到默认）
-openclaw-cn cron add --name "运维扫描" --cron "0 6 * * *" --session isolated --message "检查运维队列" --agent ops
-
-# 切换或清除现有任务上的代理
-openclaw-cn cron edit <jobId> --agent ops
-openclaw-cn cron edit <jobId> --clear-agent
-```
 ```
 
-手动运行（调试）：
+Agent selection (multi-agent setups):
+
 ```bash
-openclaw-cn cron run <jobId> --force
+# Pin a job to agent "ops" (falls back to default if that agent is missing)
+openclaw cron add --name "Ops sweep" --cron "0 6 * * *" --session isolated --message "Check ops queue" --agent ops
+
+# Switch or clear the agent on an existing job
+openclaw cron edit <jobId> --agent ops
+openclaw cron edit <jobId> --clear-agent
 ```
 
-编辑现有任务（修补字段）：
+Manual run (debug):
+
 ```bash
-openclaw-cn cron edit <jobId> \
-  --message "更新的提示" \
+openclaw cron run <jobId> --force
+```
+
+Edit an existing job (patch fields):
+
+```bash
+openclaw cron edit <jobId> \
+  --message "Updated prompt" \
   --model "opus" \
   --thinking low
 ```
 
-运行历史：
+Run history:
+
 ```bash
-openclaw-cn cron runs --id <jobId> --limit 50
+openclaw cron runs --id <jobId> --limit 50
 ```
 
-无需创建任务的即时系统事件：
+Immediate system event without creating a job:
+
 ```bash
-openclaw-cn system event --mode now --text "下次心跳：检查电池。"
+openclaw system event --mode now --text "Next heartbeat: check battery."
 ```
 
-## 网关 API 接口
-- `cron.list`、`cron.status`、`cron.add`、`cron.update`、`cron.remove`
-- `cron.run`（强制或到期）、`cron.runs`
-对于无需任务的即时系统事件，请使用 [`openclaw-cn system event`](/cli/system)。
+## Gateway API surface
 
-## 故障排除
+- `cron.list`, `cron.status`, `cron.add`, `cron.update`, `cron.remove`
+- `cron.run` (force or due), `cron.runs`
+  For immediate system events without a job, use [`openclaw system event`](/cli/system).
 
-### "什么都不运行"
-- 检查定时任务是否启用：`cron.enabled` 和 `OPENCLAW_SKIP_CRON`。
-- 检查网关是否持续运行（定时任务在网关进程中运行）。
-- 对于 `cron` 时间表：确认时区（`--tz`）与主机时区。
+## Troubleshooting
 
-### Telegram 发送到错误的地方
-- 对于论坛主题，使用 `-100…:topic:<id>` 使其明确且无歧义。
-- 如果您在日志或存储的 "最后路线" 目标中看到 `telegram:...` 前缀，这很正常；
-  定时任务发送接受它们并仍能正确解析主题 ID。
+### “Nothing runs”
+
+- Check cron is enabled: `cron.enabled` and `OPENCLAW_SKIP_CRON`.
+- Check the Gateway is running continuously (cron runs inside the Gateway process).
+- For `cron` schedules: confirm timezone (`--tz`) vs the host timezone.
+
+### Telegram delivers to the wrong place
+
+- For forum topics, use `-100…:topic:<id>` so it’s explicit and unambiguous.
+- If you see `telegram:...` prefixes in logs or stored “last route” targets, that’s normal;
+  cron delivery accepts them and still parses topic IDs correctly.

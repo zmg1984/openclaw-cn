@@ -1,11 +1,11 @@
 import type { Command } from "commander";
 import { danger } from "../../globals.js";
-import { defaultRuntime } from "../../runtime.js";
 import { sanitizeAgentId } from "../../routing/session-key.js";
+import { defaultRuntime } from "../../runtime.js";
 import { addGatewayClientOptions, callGatewayFromCli } from "../gateway-rpc.js";
 import {
   getCronChannelOptions,
-  parseAtMs,
+  parseAt,
   parseDurationMs,
   warnIfCronSchedulerDisabled,
 } from "./shared.js";
@@ -16,41 +16,46 @@ const assignIf = (
   value: unknown,
   shouldAssign: boolean,
 ) => {
-  if (shouldAssign) target[key] = value;
+  if (shouldAssign) {
+    target[key] = value;
+  }
 };
 
 export function registerCronEditCommand(cron: Command) {
   addGatewayClientOptions(
     cron
       .command("edit")
-      .description("编辑定时任务（补丁字段）")
-      .argument("<id>", "任务 ID")
-      .option("--name <name>", "设置名称")
-      .option("--description <text>", "设置描述")
-      .option("--enable", "启用任务", false)
-      .option("--disable", "禁用任务", false)
-      .option("--delete-after-run", "一次性任务成功后删除", false)
-      .option("--keep-after-run", "一次性任务成功后保留", false)
-      .option("--session <target>", "会话目标（main|isolated）")
-      .option("--agent <id>", "设置智能体 ID")
-      .option("--clear-agent", "取消设置智能体并使用默认", false)
-      .option("--wake <mode>", "唤醒模式（now|next-heartbeat）")
-      .option("--at <when>", "设置一次性时间（ISO）或时长如 20m")
-      .option("--every <duration>", "设置间隔时长如 10m")
-      .option("--cron <expr>", "设置 Cron 表达式")
-      .option("--tz <iana>", "Cron 表达式的时区（IANA）")
-      .option("--system-event <text>", "设置 systemEvent 负载")
-      .option("--message <text>", "设置 agentTurn 负载消息")
-      .option("--thinking <level>", "智能体任务的思考级别")
-      .option("--model <model>", "智能体任务的模型覆盖")
-      .option("--timeout-seconds <n>", "智能体任务的超时秒数")
-      .option("--deliver", "交付智能体输出（使用 last-route 交付且无 --to 时必需）")
-      .option("--no-deliver", "禁用交付")
-      .option("--channel <channel>", `交付渠道（${getCronChannelOptions()}）`)
-      .option("--to <dest>", "交付目的地（E.164、Telegram chatId 或 Discord 频道/用户）")
-      .option("--best-effort-deliver", "交付失败时不使任务失败")
-      .option("--no-best-effort-deliver", "交付失败时任务失败")
-      .option("--post-prefix <prefix>", "摘要系统事件的前缀")
+      .description("Edit a cron job (patch fields)")
+      .argument("<id>", "Job id")
+      .option("--name <name>", "Set name")
+      .option("--description <text>", "Set description")
+      .option("--enable", "Enable job", false)
+      .option("--disable", "Disable job", false)
+      .option("--delete-after-run", "Delete one-shot job after it succeeds", false)
+      .option("--keep-after-run", "Keep one-shot job after it succeeds", false)
+      .option("--session <target>", "Session target (main|isolated)")
+      .option("--agent <id>", "Set agent id")
+      .option("--clear-agent", "Unset agent and use default", false)
+      .option("--wake <mode>", "Wake mode (now|next-heartbeat)")
+      .option("--at <when>", "Set one-shot time (ISO) or duration like 20m")
+      .option("--every <duration>", "Set interval duration like 10m")
+      .option("--cron <expr>", "Set cron expression")
+      .option("--tz <iana>", "Timezone for cron expressions (IANA)")
+      .option("--system-event <text>", "Set systemEvent payload")
+      .option("--message <text>", "Set agentTurn payload message")
+      .option("--thinking <level>", "Thinking level for agent jobs")
+      .option("--model <model>", "Model override for agent jobs")
+      .option("--timeout-seconds <n>", "Timeout seconds for agent jobs")
+      .option("--announce", "Announce summary to a chat (subagent-style)")
+      .option("--deliver", "Deprecated (use --announce). Announces a summary to a chat.")
+      .option("--no-deliver", "Disable announce delivery")
+      .option("--channel <channel>", `Delivery channel (${getCronChannelOptions()})`)
+      .option(
+        "--to <dest>",
+        "Delivery destination (E.164, Telegram chatId, or Discord channel/user)",
+      )
+      .option("--best-effort-deliver", "Do not fail job if delivery fails")
+      .option("--no-best-effort-deliver", "Fail job when delivery fails")
       .action(async (id, opts) => {
         try {
           if (opts.session === "main" && opts.message) {
@@ -63,24 +68,41 @@ export function registerCronEditCommand(cron: Command) {
               "Isolated jobs cannot use --system-event; use --message or --session main.",
             );
           }
-          if (opts.session === "main" && typeof opts.postPrefix === "string") {
-            throw new Error("--post-prefix only applies to isolated jobs.");
+          if (opts.announce && typeof opts.deliver === "boolean") {
+            throw new Error("Choose --announce or --no-deliver (not multiple).");
           }
 
           const patch: Record<string, unknown> = {};
-          if (typeof opts.name === "string") patch.name = opts.name;
-          if (typeof opts.description === "string") patch.description = opts.description;
-          if (opts.enable && opts.disable)
+          if (typeof opts.name === "string") {
+            patch.name = opts.name;
+          }
+          if (typeof opts.description === "string") {
+            patch.description = opts.description;
+          }
+          if (opts.enable && opts.disable) {
             throw new Error("Choose --enable or --disable, not both");
-          if (opts.enable) patch.enabled = true;
-          if (opts.disable) patch.enabled = false;
+          }
+          if (opts.enable) {
+            patch.enabled = true;
+          }
+          if (opts.disable) {
+            patch.enabled = false;
+          }
           if (opts.deleteAfterRun && opts.keepAfterRun) {
             throw new Error("Choose --delete-after-run or --keep-after-run, not both");
           }
-          if (opts.deleteAfterRun) patch.deleteAfterRun = true;
-          if (opts.keepAfterRun) patch.deleteAfterRun = false;
-          if (typeof opts.session === "string") patch.sessionTarget = opts.session;
-          if (typeof opts.wake === "string") patch.wakeMode = opts.wake;
+          if (opts.deleteAfterRun) {
+            patch.deleteAfterRun = true;
+          }
+          if (opts.keepAfterRun) {
+            patch.deleteAfterRun = false;
+          }
+          if (typeof opts.session === "string") {
+            patch.sessionTarget = opts.session;
+          }
+          if (typeof opts.wake === "string") {
+            patch.wakeMode = opts.wake;
+          }
           if (opts.agent && opts.clearAgent) {
             throw new Error("Use --agent or --clear-agent, not both");
           }
@@ -92,14 +114,20 @@ export function registerCronEditCommand(cron: Command) {
           }
 
           const scheduleChosen = [opts.at, opts.every, opts.cron].filter(Boolean).length;
-          if (scheduleChosen > 1) throw new Error("Choose at most one schedule change");
+          if (scheduleChosen > 1) {
+            throw new Error("Choose at most one schedule change");
+          }
           if (opts.at) {
-            const atMs = parseAtMs(String(opts.at));
-            if (!atMs) throw new Error("Invalid --at");
-            patch.schedule = { kind: "at", atMs };
+            const atIso = parseAt(String(opts.at));
+            if (!atIso) {
+              throw new Error("Invalid --at");
+            }
+            patch.schedule = { kind: "at", at: atIso };
           } else if (opts.every) {
             const everyMs = parseDurationMs(String(opts.every));
-            if (!everyMs) throw new Error("Invalid --every");
+            if (!everyMs) {
+              throw new Error("Invalid --every");
+            }
             patch.schedule = { kind: "every", everyMs };
           } else if (opts.cron) {
             patch.schedule = {
@@ -120,15 +148,17 @@ export function registerCronEditCommand(cron: Command) {
             ? Number.parseInt(String(opts.timeoutSeconds), 10)
             : undefined;
           const hasTimeoutSeconds = Boolean(timeoutSeconds && Number.isFinite(timeoutSeconds));
+          const hasDeliveryModeFlag = opts.announce || typeof opts.deliver === "boolean";
+          const hasDeliveryTarget = typeof opts.channel === "string" || typeof opts.to === "string";
+          const hasBestEffort = typeof opts.bestEffortDeliver === "boolean";
           const hasAgentTurnPatch =
             typeof opts.message === "string" ||
             Boolean(model) ||
             Boolean(thinking) ||
             hasTimeoutSeconds ||
-            typeof opts.deliver === "boolean" ||
-            typeof opts.channel === "string" ||
-            typeof opts.to === "string" ||
-            typeof opts.bestEffortDeliver === "boolean";
+            hasDeliveryModeFlag ||
+            hasDeliveryTarget ||
+            hasBestEffort;
           if (hasSystemEventPatch && hasAgentTurnPatch) {
             throw new Error("Choose at most one payload change");
           }
@@ -143,21 +173,25 @@ export function registerCronEditCommand(cron: Command) {
             assignIf(payload, "model", model, Boolean(model));
             assignIf(payload, "thinking", thinking, Boolean(thinking));
             assignIf(payload, "timeoutSeconds", timeoutSeconds, hasTimeoutSeconds);
-            assignIf(payload, "deliver", opts.deliver, typeof opts.deliver === "boolean");
-            assignIf(payload, "channel", opts.channel, typeof opts.channel === "string");
-            assignIf(payload, "to", opts.to, typeof opts.to === "string");
-            assignIf(
-              payload,
-              "bestEffortDeliver",
-              opts.bestEffortDeliver,
-              typeof opts.bestEffortDeliver === "boolean",
-            );
             patch.payload = payload;
           }
 
-          if (typeof opts.postPrefix === "string") {
-            patch.isolation = {
-              postToMainPrefix: opts.postPrefix.trim() ? opts.postPrefix : "Cron",
+          if (hasDeliveryModeFlag || hasDeliveryTarget || hasBestEffort) {
+            const deliveryMode =
+              opts.announce || opts.deliver === true
+                ? "announce"
+                : opts.deliver === false
+                  ? "none"
+                  : "announce";
+            patch.delivery = {
+              mode: deliveryMode,
+              channel:
+                typeof opts.channel === "string" && opts.channel.trim()
+                  ? opts.channel.trim()
+                  : undefined,
+              to: typeof opts.to === "string" && opts.to.trim() ? opts.to.trim() : undefined,
+              bestEffort:
+                typeof opts.bestEffortDeliver === "boolean" ? opts.bestEffortDeliver : undefined,
             };
           }
 

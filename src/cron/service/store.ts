@@ -39,69 +39,6 @@ function buildDeliveryFromLegacyPayload(payload: Record<string, unknown>) {
   return next;
 }
 
-function buildDeliveryPatchFromLegacyPayload(payload: Record<string, unknown>) {
-  const deliver = payload.deliver;
-  const channelRaw =
-    typeof payload.channel === "string" ? payload.channel.trim().toLowerCase() : "";
-  const toRaw = typeof payload.to === "string" ? payload.to.trim() : "";
-  const next: Record<string, unknown> = {};
-  let hasPatch = false;
-
-  if (deliver === false) {
-    next.mode = "none";
-    hasPatch = true;
-  } else if (deliver === true || toRaw) {
-    next.mode = "announce";
-    hasPatch = true;
-  }
-  if (channelRaw) {
-    next.channel = channelRaw;
-    hasPatch = true;
-  }
-  if (toRaw) {
-    next.to = toRaw;
-    hasPatch = true;
-  }
-  if (typeof payload.bestEffortDeliver === "boolean") {
-    next.bestEffort = payload.bestEffortDeliver;
-    hasPatch = true;
-  }
-
-  return hasPatch ? next : null;
-}
-
-function mergeLegacyDeliveryInto(
-  delivery: Record<string, unknown>,
-  payload: Record<string, unknown>,
-) {
-  const patch = buildDeliveryPatchFromLegacyPayload(payload);
-  if (!patch) {
-    return { delivery, mutated: false };
-  }
-
-  const next = { ...delivery };
-  let mutated = false;
-
-  if ("mode" in patch && patch.mode !== next.mode) {
-    next.mode = patch.mode;
-    mutated = true;
-  }
-  if ("channel" in patch && patch.channel !== next.channel) {
-    next.channel = patch.channel;
-    mutated = true;
-  }
-  if ("to" in patch && patch.to !== next.to) {
-    next.to = patch.to;
-    mutated = true;
-  }
-  if ("bestEffort" in patch && patch.bestEffort !== next.bestEffort) {
-    next.bestEffort = patch.bestEffort;
-    mutated = true;
-  }
-
-  return { delivery: next, mutated };
-}
-
 function stripLegacyDeliveryFields(payload: Record<string, unknown>) {
   if ("deliver" in payload) {
     delete payload.deliver;
@@ -126,24 +63,23 @@ async function getFileMtimeMs(path: string): Promise<number | null> {
   }
 }
 
-export async function ensureLoaded(
-  state: CronServiceState,
-  opts?: {
-    forceReload?: boolean;
-    /** Skip recomputing nextRunAtMs after load so the caller can run due
-     *  jobs against the persisted values first (see onTimer). */
-    skipRecompute?: boolean;
-  },
-) {
-  // Fast path: store is already in memory. Other callers (add, list, run, …)
-  // trust the in-memory copy to avoid a stat syscall on every operation.
-  if (state.store && !opts?.forceReload) {
+export async function ensureLoaded(state: CronServiceState) {
+  const fileMtimeMs = await getFileMtimeMs(state.deps.storePath);
+
+  // Check if we need to reload:
+  // - No store loaded yet
+  // - File modification time has changed
+  // - File was modified after we last loaded (external edit)
+  const needsReload =
+    !state.store ||
+    (fileMtimeMs !== null &&
+      state.storeFileMtimeMs !== null &&
+      fileMtimeMs > state.storeFileMtimeMs);
+
+  if (!needsReload) {
     return;
   }
-  // Force reload always re-reads the file to avoid missing cross-service
-  // edits on filesystems with coarse mtime resolution.
 
-  const fileMtimeMs = await getFileMtimeMs(state.deps.storePath);
   const loaded = await loadCronStore(state.deps.storePath);
   const jobs = (loaded.jobs ?? []) as unknown as Array<Record<string, unknown>>;
   let mutated = false;
@@ -162,11 +98,6 @@ export async function ensureLoaded(
     const desc = normalizeOptionalText(raw.description);
     if (raw.description !== desc) {
       raw.description = desc;
-      mutated = true;
-    }
-
-    if (typeof raw.enabled !== "boolean") {
-      raw.enabled = true;
       mutated = true;
     }
 
@@ -244,16 +175,6 @@ export async function ensureLoaded(
         mutated = true;
       }
       if (payloadRecord && hasLegacyDelivery) {
-        if (hasDelivery) {
-          const merged = mergeLegacyDeliveryInto(
-            delivery as Record<string, unknown>,
-            payloadRecord,
-          );
-          if (merged.mutated) {
-            raw.delivery = merged.delivery;
-            mutated = true;
-          }
-        }
         stripLegacyDeliveryFields(payloadRecord);
         mutated = true;
       }
@@ -263,9 +184,8 @@ export async function ensureLoaded(
   state.storeLoadedAtMs = state.deps.nowMs();
   state.storeFileMtimeMs = fileMtimeMs;
 
-  if (!opts?.skipRecompute) {
-    recomputeNextRuns(state);
-  }
+  // Recompute next runs after loading to ensure accuracy
+  recomputeNextRuns(state);
 
   if (mutated) {
     await persist(state);
