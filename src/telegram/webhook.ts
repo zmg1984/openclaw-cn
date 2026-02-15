@@ -14,6 +14,7 @@ import {
   stopDiagnosticHeartbeat,
 } from "../logging/diagnostic.js";
 import { resolveTelegramAllowedUpdates } from "./allowed-updates.js";
+import { withTelegramApiErrorLogging } from "./api-logging.js";
 import { createTelegramBot } from "./bot.js";
 
 export async function startTelegramWebhook(opts: {
@@ -33,7 +34,14 @@ export async function startTelegramWebhook(opts: {
   const path = opts.path ?? "/telegram-webhook";
   const healthPath = opts.healthPath ?? "/healthz";
   const port = opts.port ?? 8787;
-  const host = opts.host ?? "0.0.0.0";
+  const host = opts.host ?? "127.0.0.1";
+  const secret = typeof opts.secret === "string" ? opts.secret.trim() : "";
+  if (!secret) {
+    throw new Error(
+      "Telegram webhook mode requires a non-empty secret token. " +
+        "Set channels.telegram.webhookSecret in your config.",
+    );
+  }
   const runtime = opts.runtime ?? defaultRuntime;
   const diagnosticsEnabled = isDiagnosticsEnabled(opts.config);
   const bot = createTelegramBot({
@@ -44,7 +52,7 @@ export async function startTelegramWebhook(opts: {
     accountId: opts.accountId,
   });
   const handler = webhookCallback(bot, "http", {
-    secretToken: opts.secret,
+    secretToken: secret,
   });
 
   if (diagnosticsEnabled) {
@@ -97,9 +105,14 @@ export async function startTelegramWebhook(opts: {
   const publicUrl =
     opts.publicUrl ?? `http://${host === "0.0.0.0" ? "localhost" : host}:${port}${path}`;
 
-  await bot.api.setWebhook(publicUrl, {
-    secret_token: opts.secret,
-    allowed_updates: resolveTelegramAllowedUpdates(),
+  await withTelegramApiErrorLogging({
+    operation: "setWebhook",
+    runtime,
+    fn: () =>
+      bot.api.setWebhook(publicUrl, {
+        secret_token: secret,
+        allowed_updates: resolveTelegramAllowedUpdates(),
+      }),
   });
 
   await new Promise<void>((resolve) => server.listen(port, host, resolve));
