@@ -53,11 +53,11 @@ async function requireRiskAcknowledgement(params: {
     [
       "安全警告 — 请阅读。",
       "",
-      "Clawdbot 是一个业余项目，仍处于测试阶段。可能会有粗糙之处。",
+      "OpenClaw 是一个业余项目，仍处于测试阶段。可能会有粗糙之处。",
       "如果启用了工具，此机器人可以读取文件并执行操作。",
       "不良提示可能会诱使其执行不安全的操作。",
       "",
-      "如果您不熟悉基本的安全和访问控制，请不要运行 Clawdbot。",
+      "如果您不熟悉基本的安全和访问控制，请不要运行 OpenClaw。",
       "在启用工具或将系统暴露给互联网之前，请寻求有经验的人士帮助。",
       "",
       "推荐的基础设置：",
@@ -90,7 +90,7 @@ export async function runOnboardingWizard(
   prompter: WizardPrompter,
 ) {
   printWizardHeader(runtime);
-  await prompter.intro("Clawdbot 安装引导");
+  await prompter.intro("OpenClaw 安装引导");
   await requireRiskAcknowledgement({ opts, prompter });
 
   const snapshot = await readConfigFileSnapshot();
