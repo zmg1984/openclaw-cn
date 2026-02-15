@@ -75,7 +75,7 @@ export const resolveAuthLabel = async (
 
       if (profile.type === "api_key") {
         return {
-          label: `${profileId} api-key ${maskApiKey(profile.key)}${more}`,
+          label: `${profileId} api-key ${maskApiKey(profile.key ?? "")}${more}`,
           source: "",
         };
       }
@@ -132,7 +132,7 @@ export const resolveAuthLabel = async (
       }
       if (profile.type === "api_key") {
         const suffix = flags.length > 0 ? ` (${flags.join(", ")})` : "";
-        return `${profileId}=${maskApiKey(profile.key)}${suffix}`;
+        return `${profileId}=${maskApiKey(profile.key ?? "")}${suffix}`;
       }
       if (profile.type === "token") {
         if (

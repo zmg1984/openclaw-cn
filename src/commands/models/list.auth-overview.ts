@@ -36,7 +36,7 @@ export function resolveProviderAuthOverview(params: {
     const profile = store.profiles[profileId];
     if (!profile) return `${profileId}=missing`;
     if (profile.type === "api_key") {
-      return withUnusableSuffix(`${profileId}=${maskApiKey(profile.key)}`, profileId);
+      return withUnusableSuffix(`${profileId}=${maskApiKey(profile.key ?? "")}`, profileId);
     }
     if (profile.type === "token") {
       return withUnusableSuffix(`${profileId}=token:${maskApiKey(profile.token)}`, profileId);
