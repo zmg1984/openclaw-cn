@@ -55,17 +55,30 @@ jobs:
           LAST_TAG="${{ steps.last_checked.outputs.last_tag }}"
           echo "Checking for releases newer than $LAST_TAG..."
 
-          # 获取上游所有 Release
+          # 获取上游所有非草稿、非预发布 Release
+          # 使用数值版本比较（避免字符串字典序问题：v2026.2.2 > v2026.2.14）
           RELEASES=$(gh api "repos/$UPSTREAM_REPO/releases" --paginate \
-            --jq "[.[] | select(.tag_name > \"$LAST_TAG\" and .draft == false and .prerelease == false) | {tag: .tag_name, date: .published_at, body: .body}]")
+            --jq "[.[] | select(.draft == false and .prerelease == false) | {tag: .tag_name, date: .published_at, body: .body}]")
+
+          # 按版本号数值过滤：只保留比 LAST_TAG 更新的 release
+          RELEASES=$(echo "$RELEASES" | jq -c --arg last "$LAST_TAG" '
+            def ver: ltrimstr("v") | split("-")[0] | split(".") | map(tonumber);
+            [.[] | select(
+              (.tag | ver) as $t | ($last | ver) as $l |
+              ($t[0] > $l[0]) or
+              ($t[0] == $l[0] and $t[1] > $l[1]) or
+              ($t[0] == $l[0] and $t[1] == $l[1] and ($t[2] // 0) > ($l[2] // 0))
+            )]')
 
           COUNT=$(echo "$RELEASES" | jq 'length')
           echo "Found $COUNT new release(s)"
 
           if [ "$COUNT" -gt 0 ]; then
             echo "has_new=true" >> "$GITHUB_OUTPUT"
-            # 记录本批次最新的 tag，用于后续更新标记文件
-            LATEST=$(echo "$RELEASES" | jq -r '[.[].tag] | sort_by(.) | last')
+            # 记录本批次最新的 tag（按版本号数值排序）
+            LATEST=$(echo "$RELEASES" | jq -r '
+              def ver: ltrimstr("v") | split("-")[0] | split(".") | map(tonumber);
+              [.[] | .tag] | sort_by(. | ver) | last')
             echo "latest_tag=$LATEST" >> "$GITHUB_OUTPUT"
             echo "Latest tag in batch: $LATEST"
             # 保存 release 数据供后续步骤使用
