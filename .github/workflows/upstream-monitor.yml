@@ -190,31 +190,42 @@ jobs:
           echo "$RELEASE_BODY" >> /tmp/analysis-prompt.txt
 
           # 调用 AI API（所有中国供应商均兼容 OpenAI 格式）
+          # 使用 --rawfile 直接读取提示文件，避免 shell 转义导致 jq 解析失败
           if [ "$AI_PROVIDER" = "anthropic" ]; then
-            RESPONSE=$(curl -s "${BASE_URL}/v1/messages" \
+            REQUEST_BODY=$(jq -n --arg model "$MODEL" --rawfile prompt /tmp/analysis-prompt.txt '{
+              model: $model,
+              max_tokens: 8192,
+              messages: [{role: "user", content: $prompt}]
+            }')
+          else
+            # OpenAI 兼容格式（DeepSeek/SiliconFlow/Moonshot/Qwen/智谱/OpenAI 通用）
+            REQUEST_BODY=$(jq -n --arg model "$MODEL" --rawfile prompt /tmp/analysis-prompt.txt '{
+              model: $model,
+              messages: [{role: "user", content: $prompt}],
+              max_tokens: 8192,
+              temperature: 0.1
+            }')
+          fi
+
+          # 分离 curl 调用和 jq 解析，便于调试
+          if [ "$AI_PROVIDER" = "anthropic" ]; then
+            curl -s "${BASE_URL}/v1/messages" \
               -H "Content-Type: application/json" \
               -H "x-api-key: $AI_API_KEY" \
               -H "anthropic-version: 2023-06-01" \
-              -d "$(jq -n --arg model "$MODEL" --arg prompt "$(cat /tmp/analysis-prompt.txt)" '{
-                model: $model,
-                max_tokens: 8192,
-                messages: [{role: "user", content: $prompt}]
-              }')" | jq -r '.content[0].text')
+              -d "$REQUEST_BODY" > /tmp/api-response.json
+            RESPONSE=$(jq -r '.content[0].text' /tmp/api-response.json 2>/dev/null)
           else
-            # OpenAI 兼容格式（DeepSeek/SiliconFlow/Moonshot/Qwen/智谱/OpenAI 通用）
-            RESPONSE=$(curl -s "${BASE_URL}/chat/completions" \
+            curl -s "${BASE_URL}/chat/completions" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer $AI_API_KEY" \
-              -d "$(jq -n --arg model "$MODEL" --arg prompt "$(cat /tmp/analysis-prompt.txt)" '{
-                model: $model,
-                messages: [{role: "user", content: $prompt}],
-                max_tokens: 8192,
-                temperature: 0.1
-              }')" | jq -r '.choices[0].message.content')
+              -d "$REQUEST_BODY" > /tmp/api-response.json
+            RESPONSE=$(jq -r '.choices[0].message.content' /tmp/api-response.json 2>/dev/null)
           fi
 
           if [ -z "$RESPONSE" ] || [ "$RESPONSE" = "null" ]; then
-            echo "::error::AI API call failed. Check AI_API_KEY and AI_PROVIDER settings."
+            echo "::error::AI API call failed. Response:"
+            cat /tmp/api-response.json || true
             exit 1
           fi
 
