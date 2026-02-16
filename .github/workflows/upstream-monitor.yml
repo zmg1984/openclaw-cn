@@ -20,6 +20,8 @@ permissions:
 env:
   UPSTREAM_REPO: "openclaw/openclaw"
   CHECKLIST_FILE: "UPSTREAM_MERGE_CHECKLIST.md"
+  # 持久化标记文件，记录已处理的最新上游版本
+  LAST_TAG_FILE: ".github/last-upstream-tag"
 
 jobs:
   check-upstream:
@@ -27,14 +29,21 @@ jobs:
     outputs:
       has_new_releases: ${{ steps.check.outputs.has_new }}
       new_releases: ${{ steps.check.outputs.releases }}
+      latest_tag: ${{ steps.check.outputs.latest_tag }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Get last checked release tag
         id: last_checked
         run: |
-          # 从清单文件中提取最后处理的上游版本
-          LAST_TAG=$(grep -oE 'v2026\.[0-9]+\.[0-9]+(-[0-9]+)?' "$CHECKLIST_FILE" | sort -V | tail -1)
+          # 优先从标记文件读取已处理的最新版本
+          if [ -f "$LAST_TAG_FILE" ]; then
+            LAST_TAG=$(cat "$LAST_TAG_FILE" | tr -d '[:space:]')
+          fi
+          # 回退：从清单文件提取
+          if [ -z "$LAST_TAG" ]; then
+            LAST_TAG=$(grep -oE 'v2026\.[0-9]+\.[0-9]+(-[0-9]+)?' "$CHECKLIST_FILE" 2>/dev/null | sort -V | tail -1)
+          fi
           echo "last_tag=${LAST_TAG:-v2026.1.29}" >> "$GITHUB_OUTPUT"
           echo "Last checked upstream tag: ${LAST_TAG:-v2026.1.29}"
 
@@ -55,6 +64,10 @@ jobs:
 
           if [ "$COUNT" -gt 0 ]; then
             echo "has_new=true" >> "$GITHUB_OUTPUT"
+            # 记录本批次最新的 tag，用于后续更新标记文件
+            LATEST=$(echo "$RELEASES" | jq -r '[.[].tag] | sort_by(.) | last')
+            echo "latest_tag=$LATEST" >> "$GITHUB_OUTPUT"
+            echo "Latest tag in batch: $LATEST"
             # 保存 release 数据供后续步骤使用
             echo "$RELEASES" > /tmp/new-releases.json
             echo "releases<<RELEASES_EOF" >> "$GITHUB_OUTPUT"
@@ -249,11 +262,18 @@ jobs:
             done
           } >> "$CHECKLIST_FILE"
 
-      - name: Commit and push
+      - name: Update last checked tag and commit
+        env:
+          LATEST_TAG: ${{ needs.check-upstream.outputs.latest_tag }}
         run: |
           git config user.name "upstream-monitor[bot]"
           git config user.email "bot@openclaw-cn.dev"
-          git add "$CHECKLIST_FILE"
+
+          # 无论分析结果如何，都更新标记文件以避免重复检测
+          mkdir -p "$(dirname "$LAST_TAG_FILE")"
+          echo "$LATEST_TAG" > "$LAST_TAG_FILE"
+
+          git add "$CHECKLIST_FILE" "$LAST_TAG_FILE"
 
           if git diff --cached --quiet; then
             echo "No changes to commit"
@@ -264,14 +284,25 @@ jobs:
           git commit -m "chore: update upstream merge checklist ($TAGS)"
           git push
 
-      - name: Create summary issue
+      - name: Create summary issue (deduplicated)
         if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          TAGS=$(cat /tmp/new-releases.json | jq -r '[.[].tag] | join(", ")')
+
+          # 去重：检查是否已存在包含相同 release 标签的 open issue
+          # 用第一个 tag 作为搜索关键词（同一批 release 的 issue 标题包含所有 tags）
+          FIRST_TAG=$(cat /tmp/new-releases.json | jq -r '.[0].tag')
+          EXISTING=$(gh issue list --label "upstream" --state open --search "$FIRST_TAG in:title" --json number --jq 'length')
+
+          if [ "$EXISTING" -gt 0 ]; then
+            echo "Issue already exists for release $FIRST_TAG, skipping creation"
+            exit 0
+          fi
+
           MERGE_COUNT=$(grep -c '⬜' "$CHECKLIST_FILE" 2>/dev/null || echo "0")
           OPTIONAL_COUNT=$(grep -c '🔲' "$CHECKLIST_FILE" 2>/dev/null || echo "0")
-          TAGS=$(cat /tmp/new-releases.json | jq -r '[.[].tag] | join(", ")')
 
           if [ "$MERGE_COUNT" -gt 0 ] || [ "$OPTIONAL_COUNT" -gt 0 ]; then
             printf '%s\n' \
