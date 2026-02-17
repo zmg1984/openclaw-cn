@@ -129,8 +129,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_PROVIDER: ${{ secrets.AI_PROVIDER || vars.AI_PROVIDER || 'deepseek' }}
-          AI_BASE_URL: ${{ vars.AI_BASE_URL || '' }}
-          AI_MODEL: ${{ vars.AI_MODEL || '' }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL || vars.AI_BASE_URL || '' }}
+          AI_MODEL: ${{ secrets.AI_MODEL || vars.AI_MODEL || '' }}
         run: |
           if [ -z "$AI_API_KEY" ]; then
             echo "ℹ️ AI_API_KEY 未配置，使用脚本规则分类"
@@ -151,7 +151,12 @@ jobs:
             anthropic)   BASE_URL="${AI_BASE_URL:-https://api.anthropic.com}"; MODEL="${AI_MODEL:-claude-sonnet-4-20250514}" ;;
             *)           BASE_URL="${AI_BASE_URL:-https://api.deepseek.com/v1}"; MODEL="${AI_MODEL:-deepseek-chat}" ;;
           esac
-          echo "Using AI: $AI_PROVIDER ($MODEL)"
+          # 根据模型设置 max_tokens
+          case "$MODEL" in
+            *reasoner*|*r1*) MAX_TOKENS=16384 ;;
+            *) MAX_TOKENS=32768 ;;
+          esac
+          echo "Using AI: $AI_PROVIDER ($MODEL, max_tokens=$MAX_TOKENS)"
 
           # ---- 准备 AI 输入：只发送非 SKIP 的 commit（MERGE + OPTIONAL + REVIEW） ----
           jq -c '[.[] | select(.action != "SKIP") | {s: .sha[:10], m: .message, a: .action, p: .priority, c: .category}]' \
@@ -218,8 +223,8 @@ jobs:
 
           # ---- 调用 AI API ----
           if [ "$AI_PROVIDER" = "anthropic" ]; then
-            REQUEST_BODY=$(jq -n --arg model "$MODEL" --rawfile prompt /tmp/ai-prompt.txt '{
-              model: $model, max_tokens: 32768,
+            REQUEST_BODY=$(jq -n --arg model "$MODEL" --argjson max_tokens "$MAX_TOKENS" --rawfile prompt /tmp/ai-prompt.txt '{
+              model: $model, max_tokens: $max_tokens,
               messages: [{role: "user", content: $prompt}]
             }')
             curl -s "${BASE_URL}/v1/messages" \
@@ -229,11 +234,20 @@ jobs:
               -d "$REQUEST_BODY" > /tmp/ai-response.json
             RESPONSE=$(jq -r '.content[0].text' /tmp/ai-response.json 2>/dev/null)
           else
-            REQUEST_BODY=$(jq -n --arg model "$MODEL" --rawfile prompt /tmp/ai-prompt.txt '{
-              model: $model,
-              messages: [{role: "user", content: $prompt}],
-              max_tokens: 32768, temperature: 0.1
-            }')
+            # reasoner 模型不支持 temperature 参数
+            if [[ "$MODEL" == *reasoner* ]] || [[ "$MODEL" == *r1* ]]; then
+              REQUEST_BODY=$(jq -n --arg model "$MODEL" --argjson max_tokens "$MAX_TOKENS" --rawfile prompt /tmp/ai-prompt.txt '{
+                model: $model,
+                messages: [{role: "user", content: $prompt}],
+                max_tokens: $max_tokens
+              }')
+            else
+              REQUEST_BODY=$(jq -n --arg model "$MODEL" --argjson max_tokens "$MAX_TOKENS" --rawfile prompt /tmp/ai-prompt.txt '{
+                model: $model,
+                messages: [{role: "user", content: $prompt}],
+                max_tokens: $max_tokens, temperature: 0.1
+              }')
+            fi
             curl -s "${BASE_URL}/chat/completions" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer $AI_API_KEY" \
