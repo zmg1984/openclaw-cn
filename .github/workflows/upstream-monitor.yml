@@ -106,6 +106,7 @@ jobs:
         run: |
           git remote add upstream "https://github.com/$UPSTREAM_REPO.git" 2>/dev/null || true
           git fetch upstream --tags --force
+          git fetch upstream main
 
       - name: Extract and categorize commits
         run: |
@@ -113,7 +114,11 @@ jobs:
           ./scripts/upstream-extract-commits.sh \
             "${{ needs.check-upstream.outputs.prev_tag }}" \
             "${{ needs.check-upstream.outputs.latest_tag }}" \
-            > /tmp/commits.json 2>/tmp/extract.log
+            > /tmp/commits.json 2>/tmp/extract.log || {
+            echo "::error::Extract script failed"
+            cat /tmp/extract.log
+            exit 1
+          }
           cat /tmp/extract.log
 
       - name: Calculate statistics

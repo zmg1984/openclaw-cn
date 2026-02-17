@@ -73,6 +73,7 @@ jobs:
         run: |
           git remote add upstream https://github.com/openclaw/openclaw.git 2>/dev/null || true
           git fetch upstream --tags --force
+          git fetch upstream main
 
       - name: Resolve tags
         id: tags
